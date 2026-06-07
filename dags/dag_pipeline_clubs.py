@@ -1,3 +1,4 @@
+import os
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
@@ -16,11 +17,15 @@ default_args = {
 
 def run_script(script_path: str) -> None:
     """Exécute un script Python du projet."""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = "/opt/airflow"
+
     result = subprocess.run(
-        [sys.executable, script_path],
+        ["python", script_path],
         capture_output=True,
         text=True,
-        cwd="/opt/airflow"
+        cwd="/opt/airflow",
+        env=env
     )
     print(result.stdout)
     if result.returncode != 0:

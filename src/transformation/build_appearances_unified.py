@@ -7,7 +7,8 @@ import hashlib
 
 load_dotenv()
 
-DB_URL = f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@localhost:5432/{os.getenv('POSTGRES_DB')}"
+POSTGRES_HOST = os.getenv('POSTGRES_HOST', 'localhost')
+DB_URL = f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{POSTGRES_HOST}:5432/{os.getenv('POSTGRES_DB')}"
 engine = create_engine(DB_URL)
 
 

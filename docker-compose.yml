@@ -9,18 +9,21 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
-    _PIP_ADDITIONAL_REQUIREMENTS: 'duckdb pandas requests python-dotenv scikit-learn sqlalchemy psycopg2-binary minio'
+    _PIP_ADDITIONAL_REQUIREMENTS: 'duckdb==0.10.3 pandas requests python-dotenv scikit-learn sqlalchemy psycopg2-binary minio'
     FOOTBALL_DATA_API_TOKEN: ${FOOTBALL_DATA_API_TOKEN}
     POSTGRES_USER: ${POSTGRES_USER}
     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     POSTGRES_DB: ${POSTGRES_DB}
+    POSTGRES_HOST: postgres
     MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
     MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+    MINIO_ENDPOINT: football_minio:9000
   volumes:
     - ./dags:/opt/airflow/dags
     - ./logs/airflow:/opt/airflow/logs
     - ./src:/opt/airflow/src
     - ./.env:/opt/airflow/.env
+    - ./data:/opt/airflow/data 
   depends_on:
     airflow_postgres:
       condition: service_healthy
@@ -110,7 +113,7 @@ services:
     command: scheduler
     restart: unless-stopped
 
-  # ─── AIRFLOW INIT (initialisation unique) ─────────────────────
+  # ─── AIRFLOW INIT ─────────────────────────────────────────────
   airflow_init:
     <<: *airflow-common
     container_name: airflow_init

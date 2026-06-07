@@ -5,7 +5,7 @@ import os
 load_dotenv()
 
 client = Minio(
-    "localhost:9000",
+    "localhost:9002",
     access_key=os.getenv("MINIO_ACCESS_KEY"),
     secret_key=os.getenv("MINIO_SECRET_KEY"),
     secure=False

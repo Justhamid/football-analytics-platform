@@ -1,6 +1,6 @@
 import duckdb
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 import os
 
@@ -192,16 +192,19 @@ def construire_stats_matchs_enrichis(df: pd.DataFrame) -> pd.DataFrame:
 
 def charger_postgres(df: pd.DataFrame, table: str, schema: str) -> None:
     try:
+        with engine.connect() as conn:
+            conn.execute(text(f'DROP TABLE IF EXISTS {schema}.{table} CASCADE'))
+            conn.execute(text('COMMIT'))
         df.to_sql(
             name=table,
             con=engine,
             schema=schema,
-            if_exists="replace",
+            if_exists="append",
             index=False
         )
         print(f"  → PostgreSQL : {schema}.{table} ({len(df)} lignes)")
     except Exception as e:
-        raise RuntimeError(f"Erreur chargement {schema}.{table} : {e}")
+        raise RuntimeError(f"Erreur chargement PostgreSQL {schema}.{table} : {e}")
 
 
 def main():

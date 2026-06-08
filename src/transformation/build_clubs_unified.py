@@ -1,5 +1,5 @@
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from src.utils.team_mapping import normaliser_nom
 from dotenv import load_dotenv
 import os
@@ -69,14 +69,20 @@ def construire_clubs_unified() -> pd.DataFrame:
 
 
 def charger_postgres(df: pd.DataFrame, table: str, schema: str) -> None:
-    df.to_sql(
-        name=table,
-        con=engine,
-        schema=schema,
-        if_exists="replace",
-        index=False
-    )
-    print(f"  → PostgreSQL : {schema}.{table} ({len(df)} lignes)")
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f'DROP TABLE IF EXISTS {schema}.{table} CASCADE'))
+            conn.execute(text('COMMIT'))
+        df.to_sql(
+            name=table,
+            con=engine,
+            schema=schema,
+            if_exists="append",
+            index=False
+        )
+        print(f"  → PostgreSQL : {schema}.{table} ({len(df)} lignes)")
+    except Exception as e:
+        raise RuntimeError(f"Erreur chargement PostgreSQL {schema}.{table} : {e}")
 
 
 def main():

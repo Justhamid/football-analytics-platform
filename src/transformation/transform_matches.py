@@ -2,7 +2,7 @@ import duckdb
 import pandas as pd
 import json
 from pathlib import Path
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 import os
 
@@ -231,13 +231,15 @@ def construire_classements(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def charger_postgres(df: pd.DataFrame, table: str, schema: str) -> None:
-    # CORRECTION 6 — vérification connexion PostgreSQL
     try:
+        with engine.connect() as conn:
+            conn.execute(text(f'DROP TABLE IF EXISTS {schema}.{table} CASCADE'))
+            conn.execute(text('COMMIT'))
         df.to_sql(
             name=table,
             con=engine,
             schema=schema,
-            if_exists="replace",
+            if_exists="append",
             index=False
         )
         print(f"  → PostgreSQL : {schema}.{table} ({len(df)} lignes)")

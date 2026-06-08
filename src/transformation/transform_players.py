@@ -2,6 +2,7 @@ import duckdb
 import pandas as pd
 from pathlib import Path
 from sqlalchemy import create_engine
+from sqlalchemy import text
 from dotenv import load_dotenv
 import os
 
@@ -248,11 +249,16 @@ def construire_player_performance(df_app: pd.DataFrame) -> pd.DataFrame:
 
 def charger_postgres(df: pd.DataFrame, table: str, schema: str) -> None:
     try:
+        # DROP CASCADE pour gérer les clés étrangères
+        with engine.connect() as conn:
+            conn.execute(text(f'DROP TABLE IF EXISTS {schema}.{table} CASCADE'))
+            conn.execute(text('COMMIT'))
+
         df.to_sql(
             name=table,
             con=engine,
             schema=schema,
-            if_exists="replace",
+            if_exists="append",  # append car on vient de dropper
             index=False
         )
         print(f"  → PostgreSQL : {schema}.{table} ({len(df)} lignes)")

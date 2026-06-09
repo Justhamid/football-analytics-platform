@@ -4,6 +4,10 @@ Justification : 1.8 million de lignes nécessitent un traitement
 partitionné et parallélisable — PySpark permet de scaler
 horizontalement si le volume augmente.
 """
+# Ligne 1 du fichier
+import os
+os.environ["JAVA_HOME"] = r"C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot"
+os.environ["PATH"] = os.environ["JAVA_HOME"] + r"\bin;" + os.environ.get("PATH", "")
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
@@ -31,13 +35,20 @@ def creer_session_spark() -> SparkSession:
         .master("local[*]") \
         .config("spark.driver.memory", "2g") \
         .config("spark.sql.shuffle.partitions", "8") \
+        .config("spark.driver.extraJavaOptions",
+                "--add-opens=java.base/javax.security.auth=ALL-UNNAMED "
+                "--add-opens=java.base/java.lang=ALL-UNNAMED "
+                "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED") \
+        .config("spark.executor.extraJavaOptions",
+                "--add-opens=java.base/javax.security.auth=ALL-UNNAMED "
+                "--add-opens=java.base/java.lang=ALL-UNNAMED "
+                "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED") \
         .getOrCreate()
 
-    spark.sparkContext.setLogLevel("WARN")
+    spark.sparkContext.setLogLevel("ERROR")
     print(f"  → Spark {spark.version} initialisé")
     print(f"  → Cores disponibles : {spark.sparkContext.defaultParallelism}")
     return spark
-
 
 def charger_appearances(spark: SparkSession) -> "DataFrame":
     print("\nChargement appearances.csv avec Spark...")
@@ -129,12 +140,12 @@ def calculer_performance_spark(df: "DataFrame") -> "DataFrame":
 
 def sauvegarder_csv(df: "DataFrame", chemin: str) -> None:
     print(f"\nSauvegarde → {chemin}")
-    df.coalesce(1).write.csv(
-        chemin,
-        header=True,
-        mode="overwrite"
-    )
-    print(f"  → Sauvegardé")
+    import os
+    os.makedirs(chemin, exist_ok=True)
+    # Conversion en pandas pour la sauvegarde sur Windows
+    df_pandas = df.toPandas()
+    df_pandas.to_csv(f"{chemin}/spark_player_performance.csv", index=False)
+    print(f"  → {len(df_pandas)} lignes sauvegardées")
 
 
 def afficher_stats(df: "DataFrame") -> None:

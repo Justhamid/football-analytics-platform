@@ -1,7 +1,6 @@
 import os
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.sensors.external_task import ExternalTaskSensor
 from datetime import datetime, timedelta
 import subprocess
 import sys
@@ -37,16 +36,6 @@ with DAG(
     tags=["ml", "market_value", "football"],
 ) as dag:
 
-    # Attendre que le pipeline players soit terminé
-    wait_players = ExternalTaskSensor(
-        task_id="wait_for_players_pipeline",
-        external_dag_id="pipeline_players",
-        external_task_id="build_players_enriched",
-        timeout=3600,
-        poke_interval=60,
-        mode="reschedule",
-    )
-
     t1_features = PythonOperator(
         task_id="build_features_temporal",
         python_callable=run_script,
@@ -59,4 +48,4 @@ with DAG(
         op_args=["src/ml/train_model_temporal.py"],
     )
 
-    wait_players >> t1_features >> t2_train
+    t1_features >> t2_train

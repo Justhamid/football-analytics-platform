@@ -14,13 +14,16 @@ default_args = {
     "retry_delay":      timedelta(minutes=5),
 }
 
-
 def run_script(script_path: str) -> None:
+    env = os.environ.copy()
+    env["PYTHONPATH"] = "/opt/airflow"
+
     result = subprocess.run(
-        [sys.executable, script_path],
+        ["python", script_path],
         capture_output=True,
         text=True,
-        cwd="/opt/airflow"
+        cwd="/opt/airflow",
+        env=env
     )
     print(result.stdout)
     if result.returncode != 0:

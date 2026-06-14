@@ -10,7 +10,8 @@ import os
 load_dotenv()
 
 POSTGRES_HOST = os.getenv('POSTGRES_HOST', 'localhost')
-DB_URL = f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{POSTGRES_HOST}:5432/{os.getenv('POSTGRES_DB')}"
+POSTGRES_PORT = os.getenv('POSTGRES_PORT', '5432')
+DB_URL = f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{POSTGRES_HOST}:{POSTGRES_PORT}/{os.getenv('POSTGRES_DB')}"
 engine = create_engine(DB_URL)
 
 # Mapping codes compétition vers notre standard

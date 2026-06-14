@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-POSTGRES_URL  = f"jdbc:postgresql://localhost:5432/{os.getenv('POSTGRES_DB')}"
+POSTGRES_URL  = f"jdbc:postgresql://localhost:5433/{os.getenv('POSTGRES_DB')}"
 POSTGRES_PROPS = {
     "user":     os.getenv("POSTGRES_USER"),
     "password": os.getenv("POSTGRES_PASSWORD"),

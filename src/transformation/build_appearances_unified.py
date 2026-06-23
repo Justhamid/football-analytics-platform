@@ -39,7 +39,7 @@ def construire_appearances_unified() -> pd.DataFrame:
             position,
             market_value_in_eur
         FROM marts_players.appearances
-        WHERE date >= '2017-01-01'
+        WHERE date >= '2012-01-01'
     """, engine)
     print(f"  → {len(appearances)} apparitions chargées")
 
@@ -50,7 +50,7 @@ def construire_appearances_unified() -> pd.DataFrame:
         encoding_errors="replace"
     )
     games_tm["date"] = pd.to_datetime(games_tm["date"], errors="coerce")
-    games_tm = games_tm[games_tm["date"] >= "2017-01-01"]
+    games_tm = games_tm[games_tm["date"] >= "2012-01-01"]
 
     # Mapping compétition Transfermarkt → code standard
     comp_mapping = {

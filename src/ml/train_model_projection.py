@@ -205,29 +205,81 @@ def entrainer_par_poste(df_clean, features, y):
 
 
 def graphique_feature_importance(model, features):
-    print("\nGénération feature importance...")
+    print("\nGénération des graphiques feature importance...")
 
     importances = pd.Series(
         model.feature_importances_,
         index=features
     ).sort_values(ascending=False)
 
+    # Dictionnaire de noms lisibles
+    noms_lisibles = {
+        "valeur_moyenne_club":   "Niveau du club formateur",
+        "matchs_jeune":          "Matchs joués (16-21 ans)",
+        "international_caps":    "Sélections nationales",
+        "minutes_jeune":         "Minutes jouées (16-21 ans)",
+        "goals_per_90_jeune":    "Buts / 90 min (16-21 ans)",
+        "assists_per_90_jeune":  "Passes dé. / 90 min (16-21 ans)",
+        "buts_jeune":            "Buts totaux (16-21 ans)",
+        "passes_jeune":          "Passes déc. totales (16-21 ans)",
+        "height_in_cm":          "Taille (cm)",
+        "international_goals":   "Buts internationaux",
+        "age_premier_match":     "Âge au 1er match pro",
+        "nb_competitions_jeune": "Nb compétitions (16-21 ans)",
+        "position_enc":          "Poste",
+        "foot_enc":              "Pied préférentiel",
+    }
+
+    # ── Graphique 1 : vue globale (noms techniques) ────────
+    imp_globale = importances.copy()
+    imp_globale.index = [noms_lisibles.get(i, i)
+                         for i in imp_globale.index]
+
     fig, ax = plt.subplots(figsize=(10, 6))
-    couleurs = ["#0F6E56" if i < 3 else "#9FE1CB"
-                for i in range(len(importances))]
-    ax.barh(importances.index[::-1], importances.values[::-1],
+    couleurs = ["#0F6E56" if i == 0 else "#9FE1CB"
+                for i in range(len(imp_globale))]
+    ax.barh(imp_globale.index[::-1], imp_globale.values[::-1],
             color=couleurs[::-1])
     ax.set_xlabel("Importance", fontsize=12)
     ax.set_title(
-        "Variables influençant la projection de carrière\n"
-        "(stats 16-21 ans → valeur future)",
-        fontsize=13, fontweight='bold'
+        "Importance des variables — vue globale\n"
+        "Le niveau du club formateur est le meilleur prédicteur",
+        fontsize=12, fontweight='bold'
     )
     plt.tight_layout()
-    chemin = MODELS_DIR / "projection_feature_importance.png"
-    plt.savefig(chemin, dpi=150, bbox_inches='tight')
+    chemin1 = MODELS_DIR / "projection_feature_importance_globale.png"
+    plt.savefig(chemin1, dpi=150, bbox_inches='tight')
     plt.close()
-    print(f"  → {chemin}")
+    print(f"  → Graphique 1 : {chemin1}")
+
+    # ── Graphique 2 : sans valeur_moyenne_club ─────────────
+    # On travaille sur importances ORIGINALES (avant renommage)
+    imp_sans_club = importances.drop(
+        "valeur_moyenne_club", errors="ignore"
+    ).head(12)
+    total = imp_sans_club.sum()
+    imp_relatives = (imp_sans_club / total * 100).round(2)
+
+    # Renommer maintenant
+    imp_relatives.index = [noms_lisibles.get(i, i)
+                            for i in imp_relatives.index]
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    couleurs2 = ["#534AB7" if i < 3 else "#CECBF6"
+                 for i in range(len(imp_relatives))]
+    ax.barh(imp_relatives.index[::-1], imp_relatives.values[::-1],
+            color=couleurs2[::-1])
+    ax.set_xlabel("Importance relative (%)", fontsize=12)
+    ax.set_title(
+        "Importance relative des variables de performance\n"
+        "(hors niveau du club formateur)",
+        fontsize=12, fontweight='bold'
+    )
+    plt.tight_layout()
+    chemin2 = MODELS_DIR / "projection_feature_importance_performance.png"
+    plt.savefig(chemin2, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"  → Graphique 2 : {chemin2}")
 
 
 def sauvegarder_modele(model, modeles_poste, features,

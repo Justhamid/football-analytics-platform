@@ -14,7 +14,6 @@ default_args = {
     "retry_delay":      timedelta(minutes=5),
 }
 
-
 def run_script(script_path: str) -> None:
     result = subprocess.run(
         [sys.executable, script_path],
@@ -26,26 +25,17 @@ def run_script(script_path: str) -> None:
     if result.returncode != 0:
         raise Exception(f"Script échoué : {result.stderr}")
 
-
 with DAG(
     dag_id="pipeline_ml",
     default_args=default_args,
-    description="Pipeline ML : features temporelles → entraînement → prédictions",
-    schedule_interval="0 8 * * 1",  # Chaque lundi à 8h (après players)
+    description="Pipeline ML : projection de carrière des jeunes joueurs (16-21 ans)",
+    schedule_interval="0 8 * * 1",  # Chaque lundi à 8h (après pipeline_players)
     catchup=False,
-    tags=["ml", "market_value", "football"],
+    tags=["ml", "projection", "carriere", "football"],
 ) as dag:
 
-    t1_features = PythonOperator(
-        task_id="build_features_temporal",
+    t1_projection = PythonOperator(
+        task_id="train_model_projection",
         python_callable=run_script,
-        op_args=["src/ml/build_features_temporal.py"],
+        op_args=["src/ml/train_model_projection.py"],
     )
-
-    t2_train = PythonOperator(
-        task_id="train_model_temporal",
-        python_callable=run_script,
-        op_args=["src/ml/train_model_temporal.py"],
-    )
-
-    t1_features >> t2_train

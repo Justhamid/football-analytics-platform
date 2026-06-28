@@ -144,6 +144,18 @@ Prédit la valeur marchande future d'un joueur à partir de ses statistiques ent
 | Scouting Joueurs | Goals/90 · assists/90 · joueurs sous-évalués |
 | Projection de Carrière | Top U22 · pépites <5M€ · valeur projetée vs actuelle |
 
+## Démo interactive — Projection de carrière
+
+Une application Streamlit permet de simuler la projection de carrière
+d'un jeune joueur en temps réel.
+
+```bash
+streamlit run app.py
+```
+
+Accessible sur `http://localhost:8501` — entrez les statistiques d'un
+joueur (16–21 ans) et obtenez une estimation de sa valeur marchande future.
+
 ## Structure du projet
 
 ```

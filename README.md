@@ -15,6 +15,17 @@ destinée aux clubs professionnels, cellules de scouting et centres de formation
 Sources → Data Lake (MinIO S3) → ETL (Airflow) → Data Warehouse (PostgreSQL) → ML → BI (Metabase)
 ```
 
+## Prérequis
+
+| Outil | Version minimale |
+|---|---|
+| Python | 3.12.x |
+| Docker Desktop | 24.x ou supérieur |
+| Git | 2.x |
+
+> ⚠️ PySpark nécessite Java 11+ installé sur la machine hôte.  
+> Sur Windows, `winutils.exe` doit être configuré (voir [documentation PySpark Windows](https://spark.apache.org/docs/latest/)).
+
 ## Sources de données
 
 | Source | Contenu | Volume |
@@ -35,7 +46,7 @@ Sources → Data Lake (MinIO S3) → ETL (Airflow) → Data Warehouse (PostgreSQ
 | Data Warehouse | PostgreSQL 15 | Schéma en étoile · 4 schémas |
 | ML | scikit-learn (Gradient Boosting) | Projection carrière U22 |
 | BI | Metabase | 3 dashboards interactifs |
-| Infra | Docker Compose | 5 services · réseau isolé |
+| Infra | Docker Compose | 6 services · réseau isolé |
 | Versionning | Git · GitHub | Conventional Commits |
 
 ## Installation
@@ -48,13 +59,14 @@ cd football-analytics-platform
 # 2. Créer l'environnement Python
 python -m venv venv
 .\venv\Scripts\Activate.ps1  # Windows
+# source venv/bin/activate   # Linux / macOS
 pip install -r requirements.txt
 
 # 3. Configurer les variables d'environnement
 cp .env.example .env
 # Remplir .env avec vos valeurs (voir section Variables d'environnement)
 
-# 4. Lancer l'infrastructure
+# 4. Lancer l'infrastructure (6 conteneurs)
 docker compose up -d
 
 # 5. Initialiser MinIO et PostgreSQL
@@ -69,7 +81,7 @@ POSTGRES_USER=football_admin
 POSTGRES_PASSWORD=your_password
 POSTGRES_DB=football_db
 POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
+POSTGRES_PORT=5433          # port exposé vers l'hôte (interne : 5432)
 FOOTBALL_DATA_API_TOKEN=your_token
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=your_secret
@@ -103,7 +115,6 @@ Prédit la valeur marchande future d'un joueur à partir de ses statistiques ent
 | Modèle | Dataset | R² | MAE |
 |---|---|---|---|
 | Régression linéaire | 3 289 joueurs | 0,58 | — |
-| Random Forest | 3 289 joueurs | 0,96 | 540 944 € |
 | **Gradient Boosting (retenu)** | **3 289 joueurs** | **0,61** | **4 651 790 €** |
 
 > Le R² de 0,61 est cohérent avec la littérature en football analytics pour

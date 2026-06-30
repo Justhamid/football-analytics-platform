@@ -9,7 +9,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
-    _PIP_ADDITIONAL_REQUIREMENTS: 'duckdb==0.10.3 pandas requests python-dotenv scikit-learn sqlalchemy psycopg2-binary minio'
+    _PIP_ADDITIONAL_REQUIREMENTS: 'matplotlib duckdb==0.10.3 pandas requests python-dotenv scikit-learn sqlalchemy psycopg2-binary minio'
     FOOTBALL_DATA_API_TOKEN: ${FOOTBALL_DATA_API_TOKEN}
     POSTGRES_USER: ${POSTGRES_USER}
     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

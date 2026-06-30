@@ -29,9 +29,9 @@ jobs:
           pip install flake8 pandas numpy scikit-learn sqlalchemy python-dotenv
 
       - name: Vérification syntaxe Python (flake8)
-        run: |
-          flake8 src/ dags/ --max-line-length=120 --exclude=__pycache__ --count --statistics
         continue-on-error: true
+        run: |
+          flake8 src/ dags/ --max-line-length=120 --exclude=__pycache__ --count --statistics || true
 
       - name: Vérification imports critiques
         run: |

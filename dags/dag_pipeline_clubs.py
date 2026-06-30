@@ -1,17 +1,49 @@
 import os
+import subprocess
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
-import subprocess
-import sys
+
+
+def on_failure_callback(context):
+    """Callback exécuté automatiquement en cas d'échec d'une tâche."""
+    from airflow.utils.email import send_email
+
+    dag_id   = context["dag"].dag_id
+    task_id  = context["task_instance"].task_id
+    log_url  = context["task_instance"].log_url
+    exc      = context.get("exception", "Erreur inconnue")
+
+    subject = f"[Football Analytics] ❌ Échec : {dag_id}.{task_id}"
+    body = f"""
+    <h3>⚠️ Échec de tâche Airflow</h3>
+    <table>
+        <tr><td><b>DAG</b></td><td>{dag_id}</td></tr>
+        <tr><td><b>Tâche</b></td><td>{task_id}</td></tr>
+        <tr><td><b>Date</b></td><td>{context['execution_date']}</td></tr>
+        <tr><td><b>Erreur</b></td><td>{exc}</td></tr>
+        <tr><td><b>Logs</b></td><td><a href="{log_url}">{log_url}</a></td></tr>
+    </table>
+    <p>Action requise : vérifier les logs et relancer la tâche si nécessaire.</p>
+    """
+    send_email(
+        to=os.getenv("AIRFLOW_ALERT_EMAIL", "hamidbelhadjkacem@gmail.com"),
+        subject=subject,
+        html_content=body
+    )
+
 
 default_args = {
-    "owner":            "football_analytics",
-    "depends_on_past":  False,
-    "start_date":       datetime(2024, 1, 1),
-    "email_on_failure": False,
-    "retries":          1,
-    "retry_delay":      timedelta(minutes=5),
+    "owner":               "football_analytics",
+    "depends_on_past":     False,
+    "start_date":          datetime(2024, 1, 1),
+    "email_on_failure":    True,
+    "email_on_retry":      False,
+    "email":               [os.getenv("AIRFLOW_ALERT_EMAIL",
+                             "hamidbelhadjkacem@gmail.com")],
+    "retries":             1,
+    "retry_delay":         timedelta(minutes=5),
+    "on_failure_callback": on_failure_callback,
 }
 
 
@@ -36,7 +68,7 @@ with DAG(
     dag_id="pipeline_clubs",
     default_args=default_args,
     description="Pipeline complet clubs : collecte API → ETL → classements",
-    schedule_interval="0 6 * * 1",  # Chaque lundi à 6h
+    schedule_interval="0 6 * * 1",
     catchup=False,
     tags=["clubs", "etl", "football"],
 ) as dag:
@@ -71,5 +103,4 @@ with DAG(
         op_args=["src/transformation/build_clubs_unified.py"],
     )
 
-    # Ordre d'exécution
     t1_collect >> t2_transform >> t3_unified >> t4_classements >> t5_clubs

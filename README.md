@@ -12,7 +12,7 @@ destinée aux clubs professionnels, cellules de scouting et centres de formation
 ## Architecture
 
 ```
-Sources → Data Lake (MinIO S3) → ETL (Airflow) → Data Warehouse (PostgreSQL) → ML → BI (Metabase)
+Sources → Data Lake (MinIO S3) → ETL (Airflow) → Data Warehouse (PostgreSQL) → ML → API REST (FastAPI) → BI (Metabase) / Clients
 ```
 
 ## Prérequis
@@ -46,8 +46,9 @@ Sources → Data Lake (MinIO S3) → ETL (Airflow) → Data Warehouse (PostgreSQ
 | Data Warehouse | PostgreSQL 15 | Schéma en étoile · 4 schémas |
 | ML | scikit-learn (Gradient Boosting) | Projection carrière U22 |
 | BI | Metabase | 3 dashboards interactifs |
-| Infra | Docker Compose | 6 services · réseau isolé |
+| Infra | Docker Compose | 7 services · réseau isolé |
 | Versionning | Git · GitHub | Conventional Commits |
+| API REST | FastAPI + Uvicorn | Exposition des prédictions ML |
 
 ## Installation
 
@@ -143,6 +144,17 @@ Prédit la valeur marchande future d'un joueur à partir de ses statistiques ent
 | Clubs & Ligues | Classements · avantage domicile · top offensives/défenses |
 | Scouting Joueurs | Goals/90 · assists/90 · joueurs sous-évalués |
 | Projection de Carrière | Top U22 · pépites <5M€ · valeur projetée vs actuelle |
+
+## API REST — Prédictions ML (localhost:8000)
+
+| Endpoint | Méthode | Description |
+|---|---|---|
+| `/` | GET | Santé de l'API |
+| `/predictions` | GET | Liste des 1 147 prédictions U22 |
+| `/predictions/{player_id}` | GET | Prédiction d'un joueur par ID |
+| `/predict` | POST | Prédiction à la volée pour un nouveau joueur |
+
+Documentation interactive : `http://localhost:8000/docs`
 
 ## Démo interactive — Projection de carrière
 

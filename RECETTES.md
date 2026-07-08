@@ -115,6 +115,23 @@ ORDER BY schemaname, tablename;
 
 ---
 
+### F09 — API REST FastAPI
+
+| Champ | Détail |
+|---|---|
+| **Objectif** | Vérifier que l'API de prédiction est opérationnelle |
+| **Procédure** | `GET http://localhost:8000/` |
+| **Résultat attendu** | `{"status": "ok"}` |
+| **Résultat obtenu** | ✅ |
+
+| Endpoint | Test | Résultat attendu | Résultat obtenu |
+|---|---|---|---|
+| `GET /predictions` | Appel sans paramètre | 20 prédictions U22 retournées | ✅ |
+| `POST /predict` | Stats joueur U17 en JSON | Valeur projetée + interprétation | ✅ |
+| `GET /docs` | Swagger UI | Documentation interactive accessible | ✅ |
+
+---
+
 ## 3. Tests structurels
 
 ### S01 — Contraintes d'intégrité PostgreSQL

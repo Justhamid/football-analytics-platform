@@ -67,11 +67,17 @@ def run_script(script_path: str) -> None:
 with DAG(
     dag_id="pipeline_clubs",
     default_args=default_args,
-    description="Pipeline complet clubs : collecte API → ETL → classements",
+    description="Pipeline clubs : collecte API + refresh football-datasets → transformation → classements",
     schedule_interval="0 6 * * 1",
     catchup=False,
     tags=["clubs", "etl", "football"],
 ) as dag:
+
+    t0_refresh_fd = PythonOperator(
+        task_id="refresh_football_datasets_source",
+        python_callable=run_script,
+        op_args=["src/ingestion/refresh_football_datasets_source.py"],
+    )
 
     t1_collect = PythonOperator(
         task_id="collect_api_matches",
@@ -103,4 +109,4 @@ with DAG(
         op_args=["src/transformation/build_clubs_unified.py"],
     )
 
-    t1_collect >> t2_transform >> t3_unified >> t4_classements >> t5_clubs
+    t0_refresh_fd >> t1_collect >> t2_transform >> t3_unified >> t4_classements >> t5_clubs

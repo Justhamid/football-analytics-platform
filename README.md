@@ -5,7 +5,7 @@ destinée aux clubs professionnels, cellules de scouting et centres de formation
 
 ## Objectifs
 
-- Analyser les performances des équipes sur 5 ligues européennes (2017–2025)
+- Analyser les performances des équipes sur 5 ligues européennes (2016–2025)
 - Scouting individuel des joueurs avec indicateurs avancés (goals/90, assists/90)
 - Projection de carrière des jeunes joueurs (16–21 ans) par apprentissage automatique
 
@@ -23,18 +23,23 @@ Sources → Data Lake (MinIO S3) → ETL (Airflow) → Data Warehouse (PostgreSQ
 | Docker Desktop | 24.x ou supérieur |
 | Git | 2.x |
 
-> ⚠️ PySpark nécessite Java 11+ installé sur la machine hôte.  
+> ⚠️ PySpark nécessite Java 11+ installé sur la machine hôte.
 > Sur Windows, `winutils.exe` doit être configuré (voir [documentation PySpark Windows](https://spark.apache.org/docs/latest/)).
+
+> ⚠️ Sur un réseau d'entreprise avec inspection SSL (proxy type Zscaler),
+> le rafraîchissement automatisé de la source Kaggle peut être bloqué au
+> démarrage des containers Airflow (voir section *Rafraîchissement
+> automatique des sources* ci-dessous).
 
 ## Sources de données
 
 | Source | Contenu | Volume |
 |---|---|---|
-| API football-data.org | Matchs, compétitions, classements | 3 502 matchs (2023–2025) |
+| API football-data.org | Matchs, compétitions, classements | 3 502 matchs (2023–2024) |
 | Transfermarkt (Kaggle) | Joueurs, apparitions, valorisations | 1,86M apparitions (2012–2026) |
 | football-datasets (GitHub) | Historique matchs | 15 827 matchs (2017–2025) |
 
-**Résultat après unification** : 16 802 matchs uniques · 47 702 joueurs · 616 377 valorisations
+**Résultat après unification** : 16 802 matchs uniques (2016–2025) · 47 702 joueurs · 616 377 valorisations
 
 ## Stack technique
 
@@ -47,8 +52,10 @@ Sources → Data Lake (MinIO S3) → ETL (Airflow) → Data Warehouse (PostgreSQ
 | ML | scikit-learn (Gradient Boosting) | Projection carrière U22 |
 | BI | Metabase | 3 dashboards interactifs |
 | Infra | Docker Compose | 7 services · réseau isolé |
-| Versionning | Git · GitHub | Conventional Commits |
+| Versionning | Git · GitHub · Commitizen | Conventional Commits |
 | API REST | FastAPI + Uvicorn | Exposition des prédictions ML |
+| Démo | Streamlit | Interface visuelle U16-U21 |
+| CI/CD | GitHub Actions | 4 jobs (qualité, sécurité, tests, résumé) |
 
 ## Installation
 
@@ -67,7 +74,7 @@ pip install -r requirements.txt
 cp .env.example .env
 # Remplir .env avec vos valeurs (voir section Variables d'environnement)
 
-# 4. Lancer l'infrastructure (6 conteneurs)
+# 4. Lancer l'infrastructure (7 conteneurs)
 docker compose up -d
 
 # 5. Initialiser MinIO et PostgreSQL
@@ -78,14 +85,29 @@ python src/storage/setup_postgres.py
 ## Variables d'environnement (.env)
 
 ```bash
+# Base de données du projet
 POSTGRES_USER=football_admin
 POSTGRES_PASSWORD=your_password
 POSTGRES_DB=football_db
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5433          # port exposé vers l'hôte (interne : 5432)
+
+# API football-data.org
 FOOTBALL_DATA_API_TOKEN=your_token
+
+# MinIO (Data Lake)
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=your_secret
+
+# Kaggle API (rafraîchissement automatisé Transfermarkt)
+KAGGLE_USERNAME=your_kaggle_username
+KAGGLE_KEY=your_kaggle_key
+
+# Alertes email (supervision Airflow)
+AIRFLOW_ALERT_EMAIL=your_email@example.com
+AIRFLOW__SMTP__SMTP_USER=your_email@example.com
+AIRFLOW__SMTP__SMTP_PASSWORD=your_app_password   # mot de passe d'application (16 caractères)
+AIRFLOW__SMTP__SMTP_MAIL_FROM=your_email@example.com
 ```
 
 ## Pipeline complet
@@ -95,32 +117,38 @@ Exécution manuelle possible script par script :
 
 ```bash
 # ── DAG 1 : pipeline_clubs (6h00) ──────────────────────────
+python src/ingestion/refresh_football_datasets_source.py   # rafraîchissement GitHub
 python src/ingestion/collect_api_matches.py
 python src/transformation/transform_matches.py
 python src/transformation/build_unified_matches.py
 python src/transformation/build_classements_unified.py
+python src/transformation/build_clubs_unified.py
 
 # ── DAG 2 : pipeline_players (7h00) ────────────────────────
+python src/ingestion/refresh_transfermarkt_source.py        # rafraîchissement Kaggle
 python src/transformation/transform_players.py
-python src/transformation/build_appearances_unified.py   # couvre 2012-2026
+python src/transformation/build_appearances_unified.py      # couvre 2012-2026
 python src/transformation/build_players_enriched.py
 
 # ── DAG 3 : pipeline_ml (8h00) ─────────────────────────────
 python src/ml/train_model_projection.py
 ```
+
 ### Rafraîchissement automatique des sources
 
-- **API football-data.org** : collectée en direct à chaque exécution 
-  hebdomadaire (`pipeline_clubs`, lundi 6h), avec contrôle qualité 
-  automatisé (volume, structure).
-- **Transfermarkt (Kaggle)** : depuis le [ajout de cette fonctionnalité], 
-  retéléchargée automatiquement chaque lundi 7h (`pipeline_players`), 
-  avec sauvegarde de l'ancien snapshot et validation de schéma avant 
-  remplacement. Dataset source : mis à jour hebdomadairement par 
-  son mainteneur.
-- **football-datasets (GitHub)** : snapshot statique, non automatisé 
-  (voir perspectives d'évolution).
-  
+| Source | Automatisation | Authentification | Testé en environnement d'entreprise |
+|---|---|---|---|
+| API football-data.org | Collecte en direct, hebdomadaire | Token API | ✅ |
+| Transfermarkt (Kaggle) | Refresh automatisé, hebdomadaire | Identifiants Kaggle | ⚠️ Bloqué par le proxy réseau — l'installation du paquet `kaggle` au démarrage du container échoue derrière une inspection SSL d'entreprise. Fonctionne en local et en environnement Docker standard |
+| football-datasets (GitHub) | Refresh automatisé, hebdomadaire (téléchargement conditionnel `ETag`) | Aucune | ✅ |
+
+Chaque mécanisme de rafraîchissement :
+- valide la structure et le volume des données reçues avant tout remplacement (seuil d'alerte à 90 %, seuil bloquant à 30 % du volume précédent) ;
+- sauvegarde le snapshot précédent avant écrasement (rollback manuel possible) ;
+- déclenche l'alerte email de supervision (voir `EXPLOITATION.md`) en cas d'anomalie, y compris lorsque l'appel réseau réussit techniquement mais renvoie des données invalides.
+
+Testé en conditions réelles avec plusieurs scénarios de panne provoqués volontairement (authentification invalide, schéma corrompu, volume anormalement bas, blocage réseau) : dans tous les cas, le snapshot existant reste intact et l'alerte est envoyée.
+
 ## Modèle ML — Projection de carrière
 
 Prédit la valeur marchande future d'un joueur à partir de ses statistiques entre 16 et 21 ans.
@@ -143,9 +171,14 @@ Prédit la valeur marchande future d'un joueur à partir de ses statistiques ent
 | Gardiens | 0,53 | 164 |
 
 **Variables les plus importantes :**
-- Niveau du club formateur : ~85%
-- Matchs joués (16–21 ans) : ~5%
-- Sélections nationales : ~3%
+
+*Sans le niveau du club formateur :*
+- Matchs joués (16–21 ans) : 31,4 %
+- Sélections nationales : 16,2 %
+- Buts / 90 min (16–21 ans) : ~12 %
+
+*Avec le niveau du club formateur (modèle V2) :*
+- Niveau du club formateur : ~85 % (variable dominante)
 
 **Prédictions générées :** 1 147 joueurs U22 → table `marts_ml.predictions_projection_carriere`
 
@@ -178,30 +211,44 @@ streamlit run app.py
 ```
 
 Accessible sur `http://localhost:8501` — entrez les statistiques d'un
-joueur (16–21 ans) et obtenez une estimation de sa valeur marchande future.
+joueur (16–21 ans) et obtenez une estimation de sa valeur marchande future,
+son âge pic estimé, un indicateur de fiabilité et un signal de sous/sur-évaluation.
 
 ## Structure du projet
 
 ```
 football-analytics-platform/
+├── api/
+│   ├── main.py            # FastAPI : 4 endpoints
+│   ├── Dockerfile
+│   └── requirements_api.txt
 ├── dags/
 │   ├── dag_pipeline_clubs.py
 │   ├── dag_pipeline_players.py
 │   └── dag_pipeline_ml.py
 ├── src/
-│   ├── ingestion/        # Collecte API et CSV
+│   ├── ingestion/
+│   │   ├── collect_api_matches.py
+│   │   ├── refresh_transfermarkt_source.py       # rafraîchissement Kaggle
+│   │   └── refresh_football_datasets_source.py   # rafraîchissement GitHub
 │   ├── transformation/   # ETL et pipelines
 │   ├── ml/               # train_model_projection.py
 │   ├── storage/          # Setup MinIO et PostgreSQL
+│   ├── validation/       # Contrôles qualité et diagnostics
 │   └── utils/            # team_mapping.py (412 correspondances)
 ├── models/               # Modèles entraînés .pkl (non versionné)
 ├── data/
 │   └── brut/             # Données brutes (non versionné)
+├── certs/                # Certificats racine (non versionné, si proxy d'entreprise)
 ├── images/               # Schémas architecture et dashboards
+├── app.py                # Démo Streamlit
 ├── docker-compose.yml
 ├── requirements.txt
 ├── .env.example
-└── .gitignore            # .env · *.pkl · *.pyc · data/
+├── .gitignore             # .env · *.pkl · *.pyc · data/ · certs/
+├── EXPLOITATION.md        # Maintenance, supervision, reprise après incident
+├── RECETTES.md            # Tests fonctionnels, structurels et de sécurité
+└── INCIDENT.md            # Journal d'incidents documentés
 ```
 
 ## Sécurité

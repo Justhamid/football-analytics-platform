@@ -67,11 +67,17 @@ def run_script(script_path: str) -> None:
 with DAG(
     dag_id="pipeline_players",
     default_args=default_args,
-    description="Pipeline joueurs : ETL Transfermarkt → performances → enrichissement",
+    description="Pipeline joueurs : refresh Kaggle → ETL Transfermarkt → performances → enrichissement",
     schedule_interval="0 7 * * 1",
     catchup=False,
     tags=["players", "etl", "football"],
 ) as dag:
+
+    t0_refresh = PythonOperator(
+        task_id="refresh_transfermarkt_source",
+        python_callable=run_script,
+        op_args=["src/ingestion/refresh_transfermarkt_source.py"],
+    )
 
     t1_transform = PythonOperator(
         task_id="transform_players",
@@ -91,4 +97,4 @@ with DAG(
         op_args=["src/transformation/build_players_enriched.py"],
     )
 
-    t1_transform >> t2_appearances >> t3_enriched
+    t0_refresh >> t1_transform >> t2_appearances >> t3_enriched

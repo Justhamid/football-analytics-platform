@@ -108,7 +108,19 @@ python src/transformation/build_players_enriched.py
 # ── DAG 3 : pipeline_ml (8h00) ─────────────────────────────
 python src/ml/train_model_projection.py
 ```
+### Rafraîchissement automatique des sources
 
+- **API football-data.org** : collectée en direct à chaque exécution 
+  hebdomadaire (`pipeline_clubs`, lundi 6h), avec contrôle qualité 
+  automatisé (volume, structure).
+- **Transfermarkt (Kaggle)** : depuis le [ajout de cette fonctionnalité], 
+  retéléchargée automatiquement chaque lundi 7h (`pipeline_players`), 
+  avec sauvegarde de l'ancien snapshot et validation de schéma avant 
+  remplacement. Dataset source : mis à jour hebdomadairement par 
+  son mainteneur.
+- **football-datasets (GitHub)** : snapshot statique, non automatisé 
+  (voir perspectives d'évolution).
+  
 ## Modèle ML — Projection de carrière
 
 Prédit la valeur marchande future d'un joueur à partir de ses statistiques entre 16 et 21 ans.

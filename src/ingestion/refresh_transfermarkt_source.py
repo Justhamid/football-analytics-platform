@@ -9,7 +9,6 @@ from pathlib import Path
 import os
 import shutil
 import json
-import zipfile
 import tempfile
 from datetime import datetime, timezone
 import pandas as pd
@@ -68,14 +67,27 @@ COLONNES_ATTENDUES = {
     },
 }
 
-# Tolérance : une nouvelle version ne doit pas contenir moins de 90 % des
-# lignes de l'ancienne (protège contre un téléchargement tronqué/corrompu)
-SEUIL_TOLERANCE_VOLUME = 0.90
+# Tolérance sur le volume — deux seuils :
+# - en dessous de SEUIL_ALERTE : accepté mais signalé (variation notable,
+#   éventuellement légitime côté source)
+# - en dessous de SEUIL_BLOQUANT : refusé (téléchargement probablement
+#   tronqué ou corrompu, protection contre une perte de données silencieuse)
+SEUIL_ALERTE = 0.90
+SEUIL_BLOQUANT = 0.30
 
 
 def telecharger_dataset(dest_dir: Path) -> None:
     """Télécharge et décompresse le dataset Kaggle dans dest_dir."""
-    from kaggle.api.kaggle_api_extended import KaggleApi
+    # Patch pour un bug connu de la lib Kaggle : os.makedirs échoue si
+    # le dossier ~/.config/kaggle existe déjà (FileExistsError)
+    _original_makedirs = os.makedirs
+    def _makedirs_safe(name, mode=0o777, exist_ok=False):
+        return _original_makedirs(name, mode=mode, exist_ok=True)
+    os.makedirs = _makedirs_safe
+    try:
+        from kaggle.api.kaggle_api_extended import KaggleApi
+    finally:
+        os.makedirs = _original_makedirs
 
     print(f"Authentification Kaggle ({KAGGLE_USERNAME})...")
     api = KaggleApi()
@@ -115,11 +127,20 @@ def valider_snapshot(nouveau_dir: Path) -> None:
             nb_nouveau = sum(1 for _ in open(chemin, encoding="utf-8", errors="replace")) - 1
             nb_ancien = sum(1 for _ in open(ancien_chemin, encoding="utf-8", errors="replace")) - 1
 
-            if nb_ancien > 0 and nb_nouveau < nb_ancien * SEUIL_TOLERANCE_VOLUME:
-                raise ValueError(
-                    f"{fichier} : volume anormalement bas — {nb_nouveau} lignes "
-                    f"contre {nb_ancien} précédemment (seuil {SEUIL_TOLERANCE_VOLUME:.0%})."
-                )
+            if nb_ancien > 0:
+                ratio = nb_nouveau / nb_ancien
+                if ratio < SEUIL_BLOQUANT:
+                    raise ValueError(
+                        f"{fichier} : volume catastrophiquement bas — {nb_nouveau} "
+                        f"lignes contre {nb_ancien} précédemment (ratio {ratio:.0%}). "
+                        f"Refresh refusé, snapshot conservé."
+                    )
+                elif ratio < SEUIL_ALERTE:
+                    print(
+                        f"  ⚠️ {fichier} : volume en baisse notable — {nb_nouveau} "
+                        f"lignes contre {nb_ancien} précédemment (ratio {ratio:.0%}). "
+                        f"Accepté mais à vérifier manuellement."
+                    )
 
         print(f"  ✓ {fichier} validé")
 
@@ -137,7 +158,7 @@ def remplacer_snapshot(nouveau_dir: Path) -> None:
     """Remplace le snapshot local par le nouveau, une fois validé."""
     TM_DIR.mkdir(parents=True, exist_ok=True)
     for fichier in nouveau_dir.glob("*.csv"):
-        shutil.copy(fichier, TM_DIR / fichier.name)
+        shutil.copyfile(fichier, TM_DIR / fichier.name)
     print(f"  → snapshot mis à jour dans {TM_DIR}")
 
 

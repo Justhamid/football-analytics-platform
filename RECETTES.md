@@ -24,10 +24,10 @@
 
 | Champ | Détail |
 |---|---|
-| **Objectif** | Vérifier que les 6 services démarrent correctement |
+| **Objectif** | Vérifier que les 7 services démarrent correctement |
 | **Procédure** | `docker compose up -d` puis `docker compose ps` |
-| **Résultat attendu** | 6 conteneurs en état `running` : `football_postgres`, `football_minio`, `football_metabase`, `airflow_webserver`, `airflow_scheduler`, `airflow_postgres` |
-| **Résultat obtenu** | ✅ 6 conteneurs running |
+| **Résultat attendu** | 7 conteneurs en état `running` : `football_postgres`, `football_minio`, `football_metabase`, `airflow_webserver`, `airflow_scheduler`, `airflow_postgres`, `football_api` |
+| **Résultat obtenu** | ✅ 7 conteneurs running |
 
 ---
 
@@ -177,6 +177,28 @@ ORDER BY schemaname, tablename;
 
 ---
 
+### S05 — Rafraîchissement automatisé Transfermarkt (Kaggle)
+
+| Test | Procédure | Résultat attendu | Résultat obtenu |
+|---|---|---|---|
+| Refresh réussi | `python src/ingestion/refresh_transfermarkt_source.py` | Téléchargement, validation, backup, remplacement | ✅ |
+| Rollback sur schéma invalide | Colonne obligatoire retirée temporairement | Snapshot local inchangé, exception levée | ✅ |
+| Seuil d'alerte (90%) | Volume en baisse notable sur `player_valuations.csv` | Accepté avec avertissement dans les logs | ✅ |
+| Seuil bloquant (30%) | Volume catastrophique sur `transfers.csv` | Refresh refusé, snapshot conservé | ✅ |
+
+---
+
+### S06 — Rafraîchissement automatisé football-datasets (GitHub)
+
+| Test | Procédure | Résultat attendu | Résultat obtenu |
+|---|---|---|---|
+| Refresh réussi | `python src/ingestion/refresh_football_datasets_source.py` | 10 fichiers vérifiés, mis à jour ou inchangés | ✅ |
+| Idempotence (ETag) | Deux exécutions consécutives | Seconde exécution : 0 mis à jour, 10 inchangés | ✅ |
+| Rollback sur schéma invalide | Colonne obligatoire retirée temporairement | Fichiers locaux inchangés, exception levée | ✅ |
+| Intégration Airflow | Tâche `refresh_football_datasets_source` dans `pipeline_clubs` | Tâche verte, précède `collect_api_matches` | ✅ |
+
+---
+
 ## 4. Tests de sécurité
 
 ### SEC01 — Fichier .env non versionné
@@ -238,9 +260,9 @@ ORDER BY schemaname, tablename;
 | Catégorie | Nb tests | Réussis | Échoués |
 |---|---|---|---|
 | Fonctionnels | 8 | 8 | 0 |
-| Structurels | 4 | 4 | 0 |
+| Structurels | 6 | 6 | 0 |
 | Sécurité | 5 | 5 | 0 |
-| **Total** | **17** | **17** | **0** |
+| **Total** | **19** | **19** | **0** |
 
 ---
 

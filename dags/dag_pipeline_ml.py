@@ -3,8 +3,8 @@ import subprocess
 import sys
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+from airflow.sensors.external_task import ExternalTaskSensor
 from datetime import datetime, timedelta
-
 
 def on_failure_callback(context):
     """Callback exécuté automatiquement en cas d'échec d'une tâche."""
@@ -74,8 +74,20 @@ with DAG(
     tags=["ml", "projection", "carriere", "football"],
 ) as dag:
 
+    t0_wait_players = ExternalTaskSensor(
+        task_id="wait_for_pipeline_players",
+        external_dag_id="pipeline_players",
+        external_task_id="build_players_enriched",
+        execution_delta=timedelta(hours=1),
+        timeout=3600,
+        poke_interval=60,
+        mode="reschedule",
+    )
+
     t1_projection = PythonOperator(
         task_id="train_model_projection",
         python_callable=run_script,
         op_args=["src/ml/train_model_projection.py"],
     )
+
+    t0_wait_players >> t1_projection

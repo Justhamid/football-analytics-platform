@@ -38,7 +38,7 @@ def construire_appearances_unified() -> pd.DataFrame:
             player_name,
             position,
             market_value_in_eur
-        FROM marts_players.appearances
+        FROM staging.stg_appearances
         WHERE date >= '2012-01-01'
     """, engine)
     print(f"  → {len(appearances)} apparitions chargées")

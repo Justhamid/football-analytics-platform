@@ -100,7 +100,7 @@ def charger_football_datasets() -> pd.DataFrame:
 
         for fichier in sorted(chemin.glob("season-*.csv")):
             annee = annee_debut(fichier.stem)
-            if annee < 2017:
+            if annee < 2015:
                 continue
 
             try:
@@ -134,6 +134,9 @@ def charger_football_datasets() -> pd.DataFrame:
                     away_goals = row.get("FTAG")
 
                     if pd.isna(home_goals) or pd.isna(away_goals):
+                        continue
+                    
+                    if date < "2016-01-01" or date > "2025-12-31":
                         continue
 
                     lignes.append({
@@ -303,9 +306,8 @@ def main():
 
     df_api = charger_api()
     df_fd  = charger_football_datasets()
-    df_tm  = charger_transfermarkt()
 
-    df_unified = fusionner_sources(df_api, df_fd, df_tm)
+    df_unified = fusionner_sources(df_api, df_fd, pd.DataFrame())
     verifier_coherence(df_unified)
 
     # Sauvegarde PostgreSQL

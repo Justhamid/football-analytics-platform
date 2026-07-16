@@ -2,6 +2,7 @@ import os
 import subprocess
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+from airflow.sensors.external_task import ExternalTaskSensor
 from datetime import datetime, timedelta
 
 
@@ -85,6 +86,16 @@ with DAG(
         op_args=["src/transformation/transform_players.py"],
     )
 
+    t1b_wait_clubs = ExternalTaskSensor(
+        task_id="wait_for_pipeline_clubs",
+        external_dag_id="pipeline_clubs",
+        external_task_id="build_clubs_unified",
+        execution_delta=timedelta(hours=1),
+        timeout=3600,
+        poke_interval=60,
+        mode="reschedule",
+    )
+
     t2_appearances = PythonOperator(
         task_id="build_appearances_unified",
         python_callable=run_script,
@@ -97,4 +108,4 @@ with DAG(
         op_args=["src/transformation/build_players_enriched.py"],
     )
 
-    t0_refresh >> t1_transform >> t2_appearances >> t3_enriched
+    t0_refresh >> t1_transform >> t1b_wait_clubs >> t2_appearances >> t3_enriched

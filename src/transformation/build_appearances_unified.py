@@ -35,9 +35,7 @@ def construire_appearances_unified() -> pd.DataFrame:
             minutes_played,
             yellow_cards,
             red_cards,
-            player_name,
-            position,
-            market_value_in_eur
+            player_name
         FROM staging.stg_appearances
         WHERE date >= '2012-01-01'
     """, engine)

@@ -6,8 +6,12 @@ horizontalement si le volume augmente.
 """
 # Ligne 1 du fichier
 import os
-os.environ["JAVA_HOME"] = r"C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot"
-os.environ["PATH"] = os.environ["JAVA_HOME"] + r"\bin;" + os.environ.get("PATH", "")
+
+# JAVA_HOME : chemin Windows en local, sinon on garde celui deja configure
+# dans l'environnement (ex : /usr/lib/jvm/java-17-openjdk-amd64 dans Docker)
+if os.name == "nt":
+    os.environ["JAVA_HOME"] = r"C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot"
+    os.environ["PATH"] = os.environ["JAVA_HOME"] + r"\bin;" + os.environ.get("PATH", "")
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
@@ -20,10 +24,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-POSTGRES_URL  = f"jdbc:postgresql://localhost:5433/{os.getenv('POSTGRES_DB')}"
+POSTGRES_HOST_JDBC = os.getenv('POSTGRES_HOST', 'localhost')
+POSTGRES_PORT_JDBC = os.getenv('POSTGRES_PORT', '5433')
+POSTGRES_URL  = f"jdbc:postgresql://{POSTGRES_HOST_JDBC}:{POSTGRES_PORT_JDBC}/{os.getenv('POSTGRES_DB')}"
 POSTGRES_PROPS = {
-    "user":     os.getenv("POSTGRES_USER"),
-    "password": os.getenv("POSTGRES_PASSWORD"),
+    "user":     os.getenv('POSTGRES_USER'),
+    "password": os.getenv('POSTGRES_PASSWORD'),
     "driver":   "org.postgresql.Driver"
 }
 

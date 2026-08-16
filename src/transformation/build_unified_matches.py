@@ -268,7 +268,6 @@ def verifier_coherence(df: pd.DataFrame) -> None:
     print("\nVérification cohérence des scores...")
 
     # Vérifier que les matchs en doublon ont les mêmes scores
-    df_tm_raw = charger_transfermarkt()
     df_fd_raw = charger_football_datasets()
 
     # Matchs présents dans API et football-datasets

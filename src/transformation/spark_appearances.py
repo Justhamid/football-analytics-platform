@@ -23,10 +23,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-POSTGRES_URL  = f"jdbc:postgresql://localhost:5433/{os.getenv('POSTGRES_DB')}"
+POSTGRES_HOST_JDBC = os.getenv('POSTGRES_HOST', 'localhost')
+POSTGRES_PORT_JDBC = os.getenv('POSTGRES_PORT', '5433')
+POSTGRES_URL  = f"jdbc:postgresql://{POSTGRES_HOST_JDBC}:{POSTGRES_PORT_JDBC}/{os.getenv('POSTGRES_DB')}"
 POSTGRES_PROPS = {
-    "user":     os.getenv("POSTGRES_USER"),
-    "password": os.getenv("POSTGRES_PASSWORD"),
+    "user":     os.getenv('POSTGRES_USER'),
+    "password": os.getenv('POSTGRES_PASSWORD'),
     "driver":   "org.postgresql.Driver"
 }
 

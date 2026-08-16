@@ -37,9 +37,9 @@ Sources → Data Lake (MinIO S3) → ETL (Airflow) → Data Warehouse (PostgreSQ
 |---|---|---|
 | API football-data.org | Matchs, compétitions, classements | 3 502 matchs (2023–2024) |
 | Transfermarkt (Kaggle) | Joueurs, apparitions, valorisations | 1,86M apparitions (2012–2026) |
-| football-datasets (GitHub) | Historique matchs | 15 827 matchs (2017–2025) |
+| football-datasets (GitHub) | Historique matchs | 17 942 matchs (2016–2025) |
 
-**Résultat après unification** : 16 802 matchs uniques (2016–2025) · 47 702 joueurs · 616 377 valorisations
+**Résultat après unification** : 18 557 matchs uniques (2016–2025) · 47 702 joueurs · 616 377 valorisations
 
 ## Stack technique
 
@@ -173,8 +173,8 @@ Prédit la valeur marchande future d'un joueur à partir de ses statistiques ent
 **Variables les plus importantes :**
 
 *Sans le niveau du club formateur :*
-- Matchs joués (16–21 ans) : 31,4 %
-- Sélections nationales : 16,2 %
+- Matchs joués (16–21 ans) : 17,9 %
+- Sélections nationales : 13,5 %
 - Buts / 90 min (16–21 ans) : ~12 %
 
 *Avec le niveau du club formateur (modèle V2) :*

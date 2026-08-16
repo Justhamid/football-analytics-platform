@@ -214,8 +214,8 @@ Tests de validation effectués :
 |---|---|---|
 | PYTHONPATH correct | `docker exec airflow_webserver python -c "import src"` | ✅ Pas d'erreur |
 | Dépendances présentes | `docker exec airflow_webserver pip list \| grep sqlalchemy` | ✅ SQLAlchemy 2.x présent |
-| DAG pipeline_clubs | Trigger manuel depuis Airflow UI | ✅ 5 tâches succeeded |
-| DAG pipeline_players | Trigger manuel depuis Airflow UI | ✅ 3 tâches succeeded |
+| DAG pipeline_clubs | Trigger manuel depuis Airflow UI | ✅ 6 tâches succeeded |
+| DAG pipeline_players | Trigger manuel depuis Airflow UI | ✅ 5 tâches succeeded |
 | DAG pipeline_ml | Trigger manuel depuis Airflow UI | ✅ 1 tâche succeeded |
 | Sensor pipeline_ml (rétabli) | Exécution automatique complète des 3 DAGs | ✅ Succès et échec+alerte tous deux validés |
 

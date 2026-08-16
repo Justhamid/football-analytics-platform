@@ -47,8 +47,8 @@
 |---|---|
 | **Objectif** | Vérifier l'exécution complète du pipeline clubs |
 | **Procédure** | Airflow UI → DAG `pipeline_clubs` → Trigger DAG |
-| **Résultat attendu** | 5 tâches en vert : `collect_api_matches` → `transform_matches` → `build_unified_matches` → `build_classements` → `build_clubs_unified` |
-| **Résultat obtenu** | ✅ 5 tâches succeeded |
+| **Résultat attendu** | 6 tâches en vert : `refresh_football_datasets_source` →  `collect_api_matches` → `transform_matches` → `build_unified_matches` → `build_classements` → `build_clubs_unified` |
+| **Résultat obtenu** | ✅ 6 tâches succeeded |
 
 ---
 
@@ -58,8 +58,8 @@
 |---|---|
 | **Objectif** | Vérifier l'exécution complète du pipeline joueurs |
 | **Procédure** | Airflow UI → DAG `pipeline_players` → Trigger DAG |
-| **Résultat attendu** | 3 tâches en vert : `transform_players` → `build_appearances_unified` → `build_players_enriched` |
-| **Résultat obtenu** | ✅ 3 tâches succeeded |
+| **Résultat attendu** | 5 tâches en vert : `refresh_transfermarkt_source` → `transform_players` → `wait_for_pipeline_clubs (sensor)` → `build_appearances_unified` → `build_players_enriched` |
+| **Résultat obtenu** | ✅ 5 tâches succeeded |
 
 ---
 
@@ -78,7 +78,7 @@
 
 | Table | Volume attendu | Résultat obtenu |
 |---|---|---|
-| `marts_clubs.unified_matches` | 16 802 lignes | ✅ |
+| `marts_clubs.unified_matches` | 18 557 lignes | ✅ |
 | `marts_players.players` | 47 702 lignes | ✅ |
 | `marts_players.appearances_unified` | 1 862 208 lignes | ✅ |
 | `marts_players.player_valuations` | 616 377 lignes | ✅ |
@@ -172,7 +172,7 @@ ORDER BY schemaname, tablename;
 |---|---|
 | **Objectif** | Vérifier qu'une double exécution ne crée pas de doublons |
 | **Procédure** | Déclencher `pipeline_clubs` deux fois consécutives |
-| **Résultat attendu** | `unified_matches` contient toujours 16 802 lignes (DROP TABLE ... CASCADE avant rechargement) |
+| **Résultat attendu** | `unified_matches` contient toujours 18 557 lignes (DROP TABLE ... CASCADE avant rechargement) |
 | **Résultat obtenu** | ✅ Idempotence confirmée |
 
 ---

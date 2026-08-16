@@ -33,6 +33,4 @@ Thumbs.db
 
 # Docker
 docker-compose.override.yml
-fix_*.py
 
-AUDIT_TECHNIQUE.md

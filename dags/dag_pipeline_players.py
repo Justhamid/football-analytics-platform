@@ -1,19 +1,20 @@
+from datetime import datetime, timedelta
 import os
 import subprocess
+import sys
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.sensors.external_task import ExternalTaskSensor
-from datetime import datetime, timedelta
 
 
 def on_failure_callback(context):
     """Callback exécuté automatiquement en cas d'échec d'une tâche."""
     from airflow.utils.email import send_email
 
-    dag_id   = context["dag"].dag_id
-    task_id  = context["task_instance"].task_id
-    log_url  = context["task_instance"].log_url
-    exc      = context.get("exception", "Erreur inconnue")
+    dag_id = context["dag"].dag_id
+    task_id = context["task_instance"].task_id
+    log_url = context["task_instance"].log_url
+    exc = context.get("exception", "Erreur inconnue")
 
     subject = f"[Football Analytics] ❌ Échec : {dag_id}.{task_id}"
     body = f"""
@@ -30,39 +31,52 @@ def on_failure_callback(context):
     send_email(
         to=os.getenv("AIRFLOW_ALERT_EMAIL", "hamidbelhadjkacem@gmail.com"),
         subject=subject,
-        html_content=body
+        html_content=body,
     )
 
 
 default_args = {
-    "owner":               "football_analytics",
-    "depends_on_past":     False,
-    "start_date":          datetime(2024, 1, 1),
-    "email_on_failure":    True,
-    "email_on_retry":      False,
-    "email":               [os.getenv("AIRFLOW_ALERT_EMAIL",
-                             "hamidbelhadjkacem@gmail.com")],
-    "retries":             1,
-    "retry_delay":         timedelta(minutes=5),
+    "owner": "football_analytics",
+    "depends_on_past": False,
+    "start_date": datetime(2024, 1, 1),
+    "email_on_failure": True,
+    "email_on_retry": False,
+    "email": [
+        os.getenv("AIRFLOW_ALERT_EMAIL", "hamidbelhadjkacem@gmail.com")
+    ],
+    "retries": 0,
+    "retry_delay": timedelta(minutes=5),
     "on_failure_callback": on_failure_callback,
 }
 
 
 def run_script(script_path: str) -> None:
-    """Exécute un script Python du projet."""
+    """Exécute un script Python du projet en diffusant la sortie stdout en temps réel."""
     env = os.environ.copy()
     env["PYTHONPATH"] = "/opt/airflow"
 
-    result = subprocess.run(
-        ["python", script_path],
-        capture_output=True,
+    # Popen + '-u' permet d'envoyer les logs au fur et a mesure et d'eviter la coupure reseau
+    process = subprocess.Popen(
+        ["python", "-u", script_path],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
         cwd="/opt/airflow",
-        env=env
+        env=env,
     )
-    print(result.stdout)
-    if result.returncode != 0:
-        raise Exception(f"Script échoué : {result.stderr}")
+
+    # Affichage en direct dans le terminal/logs Airflow
+    if process.stdout:
+        for line in process.stdout:
+            print(line, end="")
+            sys.stdout.flush()
+
+    process.wait()
+
+    if process.returncode != 0:
+        raise Exception(
+            f"Script échoué ({script_path}) avec le code d'erreur : {process.returncode}"
+        )
 
 
 with DAG(
@@ -108,4 +122,10 @@ with DAG(
         op_args=["src/transformation/build_players_enriched.py"],
     )
 
-    t0_refresh >> t1_transform >> t1b_wait_clubs >> t2_appearances >> t3_enriched
+    (
+        t0_refresh
+        >> t1_transform
+        >> t1b_wait_clubs
+        >> t2_appearances
+        >> t3_enriched
+    )

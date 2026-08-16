@@ -2,6 +2,7 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 from src.utils.team_mapping import normaliser_nom
 from dotenv import load_dotenv
+import io
 import os
 import hashlib
 
@@ -107,21 +108,44 @@ def construire_appearances_unified() -> pd.DataFrame:
     return appearances_unified
 
 
-def charger_postgres(df: pd.DataFrame, table: str, schema: str) -> None:
+def charger_postgres(df, table: str, schema: str) -> None:
     try:
-        with engine.connect() as conn:
-            conn.execute(text(f'DROP TABLE IF EXISTS {schema}.{table} CASCADE'))
-            conn.execute(text('COMMIT'))
+        # 1. S'assurer que le schéma existe
+        with engine.begin() as conn:
+            conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema};"))
+
+        # 2. Méthode d'insertion rapide native PostgreSQL (COPY)
+        def psql_insert_copy(table_obj, conn_obj, keys, data_iter):
+            dbapi_conn = conn_obj.connection
+            with dbapi_conn.cursor() as cur:
+                s_buf = io.StringIO()
+                for row in data_iter:
+                    s_buf.write(
+                        "\t".join(
+                            [str(val) if val is not None else "" for val in row]
+                        )
+                        + "\n"
+                    )
+                s_buf.seek(0)
+                columns = ", ".join([f'"{k}"' for k in keys])
+                table_name = f'"{table_obj.schema}"."{table_obj.name}"'
+                sql = f"COPY {table_name} ({columns}) FROM STDIN WITH (FORMAT csv, DELIMITER '\t', NULL '')"
+                cur.copy_expert(sql=sql, file=s_buf)
+
+        # 3. Écriture ultra-rapide
         df.to_sql(
             name=table,
             con=engine,
             schema=schema,
-            if_exists="append",
-            index=False
+            if_exists="replace",
+            index=False,
+            method=psql_insert_copy,  # <-- Écriture instantanée
         )
         print(f"  → PostgreSQL : {schema}.{table} ({len(df)} lignes)")
     except Exception as e:
-        raise RuntimeError(f"Erreur chargement PostgreSQL {schema}.{table} : {e}")
+        raise RuntimeError(
+            f"Erreur chargement PostgreSQL {schema}.{table} : {e}"
+        )
 
 
 def main():

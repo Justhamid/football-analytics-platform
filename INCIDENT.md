@@ -167,15 +167,15 @@ def run_script(script_path: str) -> None:
 
 # Après
 def run_script(script_path: str) -> None:
-    env = os.environ.copy()          # ← copie de l'environnement complet
-    env["PYTHONPATH"] = "/opt/airflow"  # ← force le PYTHONPATH
+    env = os.environ.copy()          
+    env["PYTHONPATH"] = "/opt/airflow"  
 
     result = subprocess.run(
         ["python", script_path],
         capture_output=True,
         text=True,
         cwd="/opt/airflow",
-        env=env                      # ← transmission au sous-processus
+        env=env                      
     )
 ```
 
@@ -185,12 +185,17 @@ copier `os.environ` et le passer via le paramètre `env`.
 
 ---
 
-### Correction 4 — Suppression de l'ExternalTaskSensor
+### Correction 4 — Ajustement puis rétablissement de l'ExternalTaskSensor
 
 `pipeline_ml` utilisait initialement un `ExternalTaskSensor` pour attendre
-la fin de `pipeline_players`. Ce mécanisme bloquait indéfiniment lors des
-exécutions manuelles (hors scheduling). Il a été remplacé par le
-séquencement temporel (6h/7h/8h) déjà en place.
+la fin de `pipeline_players`. Ce mécanisme restait bloqué lors des
+exécutions manuelles hors planification, car `execution_delta` cherchait
+une correspondance de date logique qui n'existait qu'en cron réel. Retiré
+temporairement pour débloquer les tests, il a ensuite été rétabli avec la
+configuration correcte (`execution_delta`, `external_task_id` corrects) et
+validé en conditions réelles : exécution automatique complète des 3 DAGs,
+sensors compris, avec succès observé dans les deux issues (passage
+immédiat si succès, timeout et alerte sinon).
 
 ---
 
@@ -212,6 +217,7 @@ Tests de validation effectués :
 | DAG pipeline_clubs | Trigger manuel depuis Airflow UI | ✅ 5 tâches succeeded |
 | DAG pipeline_players | Trigger manuel depuis Airflow UI | ✅ 3 tâches succeeded |
 | DAG pipeline_ml | Trigger manuel depuis Airflow UI | ✅ 1 tâche succeeded |
+| Sensor pipeline_ml (rétabli) | Exécution automatique complète des 3 DAGs | ✅ Succès et échec+alerte tous deux validés |
 
 ---
 

@@ -4,13 +4,18 @@ x-airflow-common: &airflow-common
   image: apache/airflow:2.8.1
   environment:
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_postgres/airflow
+    # Connection SQLAlchemy avec Keepalive TCP pour eviter les pertes DNS/socket sous charge
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_postgres/airflow?keepalives=1&keepalives_idle=30&keepalives_interval=10&keepalives_count=5
     AIRFLOW__CORE__FERNET_KEY: ''
-    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-    AIRFLOW__SCHEDULER__SCHEDULER_ZOMBIE_TASK_THRESHOLD: '1200'
+    AIRFLOW__CORE__MIN_SERIALIZED_DAG_UPDATE_INTERVAL: '30'
+    # Configuration des tolerances du Scheduler (evite les erreurs de zombie task/heartbeat)
+    AIRFLOW__SCHEDULER__JOB_HEARTBEAT_SEC: '60'
+    AIRFLOW__SCHEDULER__SCHEDULER_ZOMBIE_TASK_THRESHOLD: '3000'
+    AIRFLOW__SCHEDULER__PARSER_SET_CREATION_DATE: 'true'
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
-    _PIP_ADDITIONAL_REQUIREMENTS: 'matplotlib duckdb==0.10.3 pandas requests python-dotenv scikit-learn sqlalchemy psycopg2-binary minio'
+    _PIP_ADDITIONAL_REQUIREMENTS: 'matplotlib duckdb==0.10.3 pandas requests python-dotenv scikit-learn sqlalchemy psycopg2-binary minio kaggle'
     # ── Variables projet ──────────────────────────────────────────
     FOOTBALL_DATA_API_TOKEN: ${FOOTBALL_DATA_API_TOKEN}
     KAGGLE_USERNAME: ${KAGGLE_USERNAME}
@@ -22,8 +27,8 @@ x-airflow-common: &airflow-common
     POSTGRES_PORT: "5432"
     MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
     MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-    MINIO_ENDPOINT: football_minio:9000
-    # ── Alertes email (C4.3.1 — supervision) ─────────────────────
+    MINIO_ENDPOINT: minio:9000
+    # ── Alertes email ────────────────────────────────────────────
     AIRFLOW_ALERT_EMAIL: ${AIRFLOW_ALERT_EMAIL}
     AIRFLOW__SMTP__SMTP_HOST: smtp.gmail.com
     AIRFLOW__SMTP__SMTP_PORT: "587"
@@ -41,6 +46,8 @@ x-airflow-common: &airflow-common
   depends_on:
     airflow_postgres:
       condition: service_healthy
+    postgres:
+      condition: service_started
 
 services:
 
@@ -126,7 +133,7 @@ services:
     container_name: airflow_scheduler
     command: scheduler
     restart: unless-stopped
-  
+
   # ─── AIRFLOW INIT ─────────────────────────────────────────────
   airflow_init:
     <<: *airflow-common
@@ -151,7 +158,7 @@ services:
     depends_on:
       - postgres
     restart: unless-stopped
-    
+
 volumes:
   postgres_data:
   minio_data:

@@ -18,15 +18,12 @@ COMPETITIONS = ["PL", "PD", "SA", "BL1", "FL1"]
 SEASONS = [2023, 2024]
 
 # Seuils minimums plausibles par compétition (nb de matchs sur une saison complète)
-# PL/PD/SA : 20 équipes -> 380 matchs. BL1/FL1 : 18 équipes -> 306 matchs.
-# Seuil fixé avec marge de sécurité pour détecter une collecte anormalement basse
-# sans être trop strict (ex: saison en cours, retards de calendrier).
 MIN_MATCHES_ATTENDUS = {
-
-    "PL": 350, "PD": 350, "SA": 350,
-
-    "BL1": 280, "FL1": 280,
-
+    "PL": 350,
+    "PD": 350,
+    "SA": 350,
+    "BL1": 280,
+    "FL1": 280,
 }
 
 CHAMPS_OBLIGATOIRES = {"homeTeam", "awayTeam", "score", "utcDate", "status"}
@@ -66,9 +63,36 @@ def valider_reponse(matches: list, competition_code: str, season: int) -> None:
             )
 
 
+def Effectuer_requete_securisee(url: str, max_retries: int = 3) -> requests.Response:
+    """
+    Exécute une requête HTTP avec gestion automatique du Rate Limit (429).
+    Si le plan gratuit (10 req/min) est dépassé, attend le temps nécessaire avant de re-tester.
+    """
+    for tentative in range(max_retries):
+        response = requests.get(url, headers=HEADERS, timeout=30)
+        
+        if response.status_code == 200:
+            return response
+            
+        elif response.status_code == 429:
+            # Récupère le temps d'attente suggéré dans les headers ou prend 15s par défaut
+            wait_time = int(response.headers.get("X-Request-Counter-Reset", 15))
+            if wait_time <= 0:
+                wait_time = 15
+                
+            print(f"  ⚠️ Rate limit (429) atteint pour l'API. Pause forcée de {wait_time}s (tentative {tentative + 1}/{max_retries})...")
+            time.sleep(wait_time)
+        else:
+            # Pour les autres codes d'erreur (403, 500, etc.)
+            return response
+
+    return response
+
+
 def collect_matches(competition_code: str, season: int) -> None:
     url = f"https://api.football-data.org/v4/competitions/{competition_code}/matches?season={season}"
-    response = requests.get(url, headers=HEADERS, timeout=30)
+    
+    response = Effectuer_requete_securisee(url)
 
     print(f"{competition_code} {season} -> status {response.status_code}")
 
@@ -106,7 +130,9 @@ def main():
             except Exception as e:
                 print(f"❌ Échec {competition}/{season} : {e}")
                 erreurs.append(f"{competition}/{season} : {e}")
-            time.sleep(6)  # pour respecter les limites du plan free
+            
+            # Pause de 7 secondes entre chaque appel (seuil de sécurité pour le plan gratuit : max 10 req/min)
+            time.sleep(7)
 
     if erreurs:
         resume = "\n".join(erreurs)

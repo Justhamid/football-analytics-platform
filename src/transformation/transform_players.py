@@ -1,21 +1,26 @@
+import os
+from pathlib import Path
 import duckdb
 import pandas as pd
-from pathlib import Path
-from sqlalchemy import create_engine
-from sqlalchemy import text
 from dotenv import load_dotenv
-import os
+from sqlalchemy import create_engine, text
 
-load_dotenv()
+# Charger le .env UNIQUEMENT si les variables ne sont pas déjà définies par Docker
+load_dotenv(override=False)
 
-POSTGRES_HOST = os.getenv('POSTGRES_HOST', 'localhost')
-POSTGRES_PORT = os.getenv('POSTGRES_PORT', '5432')
-DB_URL = f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{POSTGRES_HOST}:{POSTGRES_PORT}/{os.getenv('POSTGRES_DB')}"
+# Configuration de la connexion PostgreSQL (Réseau interne Docker)
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
+POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
+POSTGRES_DB = os.getenv("POSTGRES_DB", "football_db")
+
+DB_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 engine = create_engine(DB_URL)
 
 TM_DIR = Path("data/brut/transfermarkt")
 
-# une seule connexion DuckDB partagée
+# Une seule connexion DuckDB partagée
 con = duckdb.connect()
 
 
@@ -48,7 +53,6 @@ def transformer_players(df: pd.DataFrame) -> pd.DataFrame:
             current_club_name,
             current_club_domestic_competition_id,
             CAST(last_season AS INTEGER)                   AS last_season,
-            -- CORRECTION 2 — contrôle qualité valeur >= 0
             CASE
                 WHEN CAST(market_value_in_eur AS DOUBLE) >= 0
                 THEN CAST(market_value_in_eur AS DOUBLE)
@@ -66,7 +70,7 @@ def transformer_players(df: pd.DataFrame) -> pd.DataFrame:
           AND name IS NOT NULL
     """).df()
 
-    # déduplication sur player_id
+    # Déduplication sur player_id
     nb_avant = len(df_clean)
     df_clean = df_clean.drop_duplicates(subset=["player_id"])
     if nb_avant != len(df_clean):
@@ -97,7 +101,7 @@ def transformer_clubs(df: pd.DataFrame) -> pd.DataFrame:
         WHERE club_id IS NOT NULL
     """).df()
 
-    # déduplication clubs
+    # Déduplication clubs
     df_clean = df_clean.drop_duplicates(subset=["club_id"])
     print(f"  → {len(df_clean)} clubs valides")
     return df_clean
@@ -110,7 +114,6 @@ def transformer_valuations(df: pd.DataFrame) -> pd.DataFrame:
         SELECT
             player_id,
             CAST(date AS DATE)                      AS date,
-            -- CORRECTION 5 — contrôle qualité valeur >= 0
             CASE
                 WHEN CAST(market_value_in_eur AS DOUBLE) >= 0
                 THEN CAST(market_value_in_eur AS DOUBLE)
@@ -135,7 +138,6 @@ def transformer_transfers(df: pd.DataFrame) -> pd.DataFrame:
         SELECT
             player_id,
             player_name,
-            -- CORRECTION 6 — filtrage dates futures
             CASE
                 WHEN CAST(transfer_date AS DATE) <= CURRENT_DATE
                 THEN CAST(transfer_date AS DATE)
@@ -146,7 +148,6 @@ def transformer_transfers(df: pd.DataFrame) -> pd.DataFrame:
             from_club_name,
             to_club_id,
             to_club_name,
-            -- CORRECTION 7 — contrôle qualité transfer_fee >= 0
             CASE
                 WHEN CAST(transfer_fee AS DOUBLE) >= 0
                 THEN CAST(transfer_fee AS DOUBLE)
@@ -177,7 +178,6 @@ def transformer_appearances(df_app: pd.DataFrame,
             a.player_club_id,
             CAST(a.date AS DATE)            AS date,
             a.competition_id,
-            -- CORRECTION 8 — contrôle qualité stats >= 0
             CASE WHEN CAST(a.goals AS INTEGER) >= 0
                  THEN CAST(a.goals AS INTEGER) ELSE 0 END          AS goals,
             CASE WHEN CAST(a.assists AS INTEGER) >= 0
@@ -197,7 +197,7 @@ def transformer_appearances(df_app: pd.DataFrame,
           AND a.player_id IS NOT NULL
     """).df()
 
-    # déduplication sur appearance_id
+    # Déduplication sur appearance_id
     nb_avant = len(df_clean)
     df_clean = df_clean.drop_duplicates(subset=["appearance_id"])
     if nb_avant != len(df_clean):
@@ -217,24 +217,24 @@ def construire_player_performance(df_app: pd.DataFrame) -> pd.DataFrame:
             position,
             market_value_in_eur,
             competition_id,
-            COUNT(*)                                            AS matchs_joues,
-            SUM(goals)                                          AS total_goals,
-            SUM(assists)                                        AS total_assists,
-            SUM(minutes_played)                                 AS total_minutes,
-            SUM(yellow_cards)                                   AS total_yellow_cards,
-            SUM(red_cards)                                      AS total_red_cards,
+            COUNT(*)                                                            AS matchs_joues,
+            SUM(goals)                                                          AS total_goals,
+            SUM(assists)                                                        AS total_assists,
+            SUM(minutes_played)                                                 AS total_minutes,
+            SUM(yellow_cards)                                                   AS total_yellow_cards,
+            SUM(red_cards)                                                      AS total_red_cards,
             ROUND(SUM(goals) * 90.0 /
-                NULLIF(SUM(minutes_played), 0), 3)              AS goals_per_90,
+                NULLIF(SUM(minutes_played), 0), 3)                              AS goals_per_90,
             ROUND(SUM(assists) * 90.0 /
-                NULLIF(SUM(minutes_played), 0), 3)              AS assists_per_90,
+                NULLIF(SUM(minutes_played), 0), 3)                              AS assists_per_90,
             ROUND((SUM(goals) + SUM(assists)) * 90.0 /
-                NULLIF(SUM(minutes_played), 0), 3)              AS goal_contributions_per_90,
-            ROUND(AVG(minutes_played), 1)                       AS avg_minutes_per_match,
+                NULLIF(SUM(minutes_played), 0), 3)                              AS goal_contributions_per_90,
+            ROUND(AVG(minutes_played), 1)                                       AS avg_minutes_per_match,
             ROUND(
                 (SUM(goals) + SUM(assists)) * 90.0 /
                 NULLIF(SUM(minutes_played), 0) /
                 NULLIF(market_value_in_eur / 1000000.0, 0),
-            4)                                                  AS value_efficiency
+            4)                                                                  AS value_efficiency
         FROM df_app
         WHERE market_value_in_eur IS NOT NULL
           AND market_value_in_eur > 0
@@ -248,23 +248,45 @@ def construire_player_performance(df_app: pd.DataFrame) -> pd.DataFrame:
     return df_perf
 
 
+import io
+
+
 def charger_postgres(df: pd.DataFrame, table: str, schema: str) -> None:
     try:
-        # DROP CASCADE pour gérer les clés étrangères
-        with engine.connect() as conn:
-            conn.execute(text(f'DROP TABLE IF EXISTS {schema}.{table} CASCADE'))
-            conn.execute(text('COMMIT'))
+        # 1. S'assurer que le schéma existe
+        with engine.begin() as conn:
+            conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema};"))
 
+        # 2. Fonction d'insertion rapide native PostgreSQL (COPY)
+        def psql_insert_copy(table_obj, conn_obj, keys, data_iter):
+            dbapi_conn = conn_obj.connection
+            with dbapi_conn.cursor() as cur:
+                s_buf = io.StringIO()
+                for row in data_iter:
+                    s_buf.write(
+                        "\t".join([str(val) if val is not None else "" for val in row])
+                        + "\n"
+                    )
+                s_buf.seek(0)
+                columns = ", ".join([f'"{k}"' for k in keys])
+                table_name = f'"{table_obj.schema}"."{table_obj.name}"'
+                sql = f"COPY {table_name} ({columns}) FROM STDIN WITH (FORMAT csv, DELIMITER '\t', NULL '')"
+                cur.copy_expert(sql=sql, file=s_buf)
+
+        # 3. Écriture ultra-rapide avec replace
         df.to_sql(
             name=table,
             con=engine,
             schema=schema,
-            if_exists="append",  # append car on vient de dropper
-            index=False
+            if_exists="replace",
+            index=False,
+            method=psql_insert_copy,  # <-- C'est cette ligne qui fait passer de 5 min à 5 secondes
         )
         print(f"  → PostgreSQL : {schema}.{table} ({len(df)} lignes)")
     except Exception as e:
-        raise RuntimeError(f"Erreur chargement PostgreSQL {schema}.{table} : {e}")
+        raise RuntimeError(
+            f"Erreur chargement PostgreSQL {schema}.{table} : {e}"
+        )
 
 
 def main():

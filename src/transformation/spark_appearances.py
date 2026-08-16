@@ -30,9 +30,12 @@ POSTGRES_PROPS = {
 
 def creer_session_spark() -> SparkSession:
     print("Initialisation SparkSession...")
+    chemin_jar = os.path.abspath("jars/postgresql-42.7.13.jar")
     spark = SparkSession.builder \
         .appName("FootballAnalytics_Appearances") \
         .master("local[*]") \
+        .config("spark.driver.extraClassPath", chemin_jar) \
+        .config("spark.executor.extraClassPath", chemin_jar) \
         .config("spark.driver.memory", "2g") \
         .config("spark.sql.shuffle.partitions", "8") \
         .config("spark.driver.extraJavaOptions",
@@ -65,11 +68,23 @@ def charger_appearances(spark: SparkSession) -> "DataFrame":
     print(f"  → Colonnes : {df.columns}")
     return df
 
+def charger_players(spark: SparkSession) -> "DataFrame":
+    print("\nChargement players.csv avec Spark...")
+    df = spark.read.csv(
+        "data/brut/transfermarkt/players.csv",
+        header=True,
+        inferSchema=True,
+        encoding="UTF-8"
+    ).select("player_id", "position", "market_value_in_eur")
+    print(f"  → {df.count()} joueurs chargés")
+    return df
 
-def transformer_appearances(df: "DataFrame") -> "DataFrame":
+def transformer_appearances(df: "DataFrame", df_players: "DataFrame") -> "DataFrame":
     print("\nTransformation avec Spark...")
 
-    df_clean = df \
+    df_joined = df.join(df_players, on="player_id", how="left")
+
+    df_clean = df_joined \
         .filter(F.col("minutes_played") > 0) \
         .filter(F.col("player_id").isNotNull()) \
         .filter(F.col("date") >= "2017-01-01") \
@@ -100,8 +115,12 @@ def calculer_performance_spark(df: "DataFrame") -> "DataFrame":
     # Repartitionner par player_id pour paralléliser les agrégations
     df_repartitioned = df.repartition(8, "player_id")
 
-    df_perf = df_repartitioned \
-        .groupBy("player_id", "competition_id") \
+    df_filtered = df_repartitioned \
+        .filter(F.col("market_value_in_eur").isNotNull()) \
+        .filter(F.col("market_value_in_eur") > 0)
+
+    df_perf = df_filtered \
+        .groupBy("player_id", "player_name", "position", "market_value_in_eur", "competition_id") \
         .agg(
             F.count("*").alias("matchs_joues"),
             F.sum("goals").alias("total_goals"),
@@ -112,24 +131,20 @@ def calculer_performance_spark(df: "DataFrame") -> "DataFrame":
             F.avg("minutes_played").alias("avg_minutes_per_match"),
         ) \
         .withColumn("goals_per_90",
-            F.round(
-                F.col("total_goals") * 90.0 /
-                F.nullif(F.col("total_minutes"), F.lit(0)),
-                3
-            )
+            F.round(F.col("total_goals") * 90.0 / F.nullif(F.col("total_minutes"), F.lit(0)), 3)
         ) \
         .withColumn("assists_per_90",
-            F.round(
-                F.col("total_assists") * 90.0 /
-                F.nullif(F.col("total_minutes"), F.lit(0)),
-                3
-            )
+            F.round(F.col("total_assists") * 90.0 / F.nullif(F.col("total_minutes"), F.lit(0)), 3)
         ) \
         .withColumn("goal_contributions_per_90",
+            F.round((F.col("total_goals") + F.col("total_assists")) * 90.0 / F.nullif(F.col("total_minutes"), F.lit(0)), 3)
+        ) \
+        .withColumn("value_efficiency",
             F.round(
                 (F.col("total_goals") + F.col("total_assists")) * 90.0 /
-                F.nullif(F.col("total_minutes"), F.lit(0)),
-                3
+                F.nullif(F.col("total_minutes"), F.lit(0)) /
+                F.nullif(F.col("market_value_in_eur") / 1000000.0, F.lit(0)),
+                4
             )
         ) \
         .filter(F.col("total_minutes") >= 90)
@@ -138,14 +153,16 @@ def calculer_performance_spark(df: "DataFrame") -> "DataFrame":
     return df_perf
 
 
-def sauvegarder_csv(df: "DataFrame", chemin: str) -> None:
-    print(f"\nSauvegarde → {chemin}")
-    import os
-    os.makedirs(chemin, exist_ok=True)
-    # Conversion en pandas pour la sauvegarde sur Windows
-    df_pandas = df.toPandas()
-    df_pandas.to_csv(f"{chemin}/spark_player_performance.csv", index=False)
-    print(f"  → {len(df_pandas)} lignes sauvegardées")
+def sauvegarder_postgres(df: "DataFrame") -> None:
+    print("\nSauvegarde -> PostgreSQL marts_players.player_performance")
+    df.write \
+        .mode("overwrite") \
+        .jdbc(
+            url=POSTGRES_URL,
+            table="marts_players.player_performance",
+            properties=POSTGRES_PROPS
+        )
+    print(f"  -> {df.count()} lignes ecrites dans marts_players.player_performance")
 
 
 def afficher_stats(df: "DataFrame") -> None:
@@ -169,13 +186,13 @@ def main():
     spark = creer_session_spark()
 
     df_appearances = charger_appearances(spark)
-    df_clean       = transformer_appearances(df_appearances)
+    df_players_ref = charger_players(spark)
+    df_clean       = transformer_appearances(df_appearances, df_players_ref)
     df_perf        = calculer_performance_spark(df_clean)
 
     afficher_stats(df_perf)
 
-    # Sauvegarde CSV pour intégration dans le pipeline
-    sauvegarder_csv(df_perf, "data/traite/spark_player_performance")
+    sauvegarder_postgres(df_perf)
 
     print("\n✅ Traitement Spark terminé.")
     spark.stop()

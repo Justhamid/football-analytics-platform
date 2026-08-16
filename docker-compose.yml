@@ -1,7 +1,9 @@
 version: "3.8"
 
 x-airflow-common: &airflow-common
-  image: apache/airflow:2.8.1
+  build:
+    context: .
+    dockerfile: Dockerfile.airflow
   environment:
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     # Connection SQLAlchemy avec Keepalive TCP pour eviter les pertes DNS/socket sous charge

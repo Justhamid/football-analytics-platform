@@ -100,6 +100,12 @@ with DAG(
         op_args=["src/transformation/transform_players.py"],
     )
 
+    t1c_spark_performance = PythonOperator(
+        task_id="spark_player_performance",
+        python_callable=run_script,
+        op_args=["src/transformation/spark_appearances.py"],
+    )
+
     t1b_wait_clubs = ExternalTaskSensor(
         task_id="wait_for_pipeline_clubs",
         external_dag_id="pipeline_clubs",
@@ -125,6 +131,7 @@ with DAG(
     (
         t0_refresh
         >> t1_transform
+        >> t1c_spark_performance
         >> t1b_wait_clubs
         >> t2_appearances
         >> t3_enriched

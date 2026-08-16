@@ -323,8 +323,7 @@ def main():
     df_app_clean = transformer_appearances(df_appearances, df_players_clean)
     charger_postgres(df_app_clean, "appearances", "marts_players")
 
-    df_perf = construire_player_performance(df_app_clean)
-    charger_postgres(df_perf, "player_performance", "marts_players")
+    # player_performance est desormais construite par spark_appearances.py (tache Airflow dediee)
 
     print("\n✅ Pipeline joueurs terminé.")
 

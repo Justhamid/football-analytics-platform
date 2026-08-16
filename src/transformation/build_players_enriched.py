@@ -94,14 +94,11 @@ def construire_players_enriched() -> pd.DataFrame:
 
     # Jointure avec dernière prédiction ML
     predictions = pd.read_sql("""
-        SELECT DISTINCT ON (player_id)
+        SELECT
             player_id,
-            predicted_value,
-            actual_value,
-            difference_pct,
-            evaluation
-        FROM marts_ml.predictions_market_value_temporal
-        ORDER BY player_id, date_t1 DESC
+            valeur_actuelle AS actual_value,
+            valeur_projetee AS predicted_value
+        FROM marts_ml.predictions_projection_carriere
     """, engine)
 
     players_enriched = players_enriched.merge(
@@ -141,7 +138,7 @@ def main():
     print(df[[
         "name", "position", "age",
         "current_club_normalized", "current_competition_name",
-        "market_value_in_eur", "predicted_value", "evaluation"
+        "market_value_in_eur", "predicted_value"
     ]].dropna(subset=["predicted_value"]).head(10).to_string())
 
 

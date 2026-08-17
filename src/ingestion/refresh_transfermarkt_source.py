@@ -105,10 +105,23 @@ def compter_lignes_minio(object_name: str) -> int:
     """Compte les lignes d'un objet CSV deja present dans MinIO (0 si absent)."""
     try:
         response = minio_client.get_object(BUCKET, object_name)
-        contenu = response.read()
+        nb_lignes = -1  # ne pas compter l'en-tete
+        for _ in response.stream(32 * 1024):
+            pass
+        # Alternative fiable : compter via un flux, sans tout garder en memoire
         response.close()
         response.release_conn()
-        return contenu.count(b"\n") - 1
+
+        response2 = minio_client.get_object(BUCKET, object_name)
+        nb_lignes = -1
+        buffer = b""
+        for chunk in response2.stream(64 * 1024):
+            buffer += chunk
+            nb_lignes += buffer.count(b"\n")
+            buffer = buffer[buffer.rfind(b"\n") + 1:] if b"\n" in buffer else buffer
+        response2.close()
+        response2.release_conn()
+        return max(nb_lignes, 0)
     except Exception:
         return 0
 
@@ -136,7 +149,10 @@ def valider_snapshot(nouveau_dir: Path) -> None:
 
         nb_ancien = compter_lignes_minio(fichier)
         if nb_ancien > 0:
-            nb_nouveau = sum(1 for _ in open(chemin, encoding="utf-8", errors="replace")) - 1
+            nb_nouveau = -1
+            with open(chemin, "rb") as f:
+                for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                    nb_nouveau += chunk.count(b"\n")
             ratio = nb_nouveau / nb_ancien
 
             if ratio < SEUIL_BLOQUANT:

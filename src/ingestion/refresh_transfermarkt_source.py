@@ -1,17 +1,18 @@
 """
-Rafraîchit le snapshot local du dataset Transfermarkt (Kaggle) en le
-retéléchargeant, avec validation de structure et sauvegarde de l'ancien
-snapshot avant remplacement (rollback possible en cas d'échec de la
-validation en aval).
+Rafraîchit le snapshot Transfermarkt (Kaggle) en le retéléchargeant et
+en le stockant dans MinIO (bucket raw-transfermarkt), avec validation de
+structure/volume et sauvegarde de l'ancien objet avant remplacement.
 """
 
 from pathlib import Path
+from io import BytesIO
 import os
-import shutil
 import json
 import tempfile
 from datetime import datetime, timezone
 import pandas as pd
+from minio import Minio
+from minio.commonconfig import CopySource
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -24,18 +25,21 @@ if not KAGGLE_USERNAME or not KAGGLE_KEY:
         "KAGGLE_USERNAME / KAGGLE_KEY introuvables dans le fichier .env"
     )
 
-# kaggle lit ces deux variables directement depuis os.environ à l'authentification
 os.environ["KAGGLE_USERNAME"] = KAGGLE_USERNAME
 os.environ["KAGGLE_KEY"] = KAGGLE_KEY
 
 DATASET_SLUG = "davidcariboo/player-scores"
-TM_DIR = Path("data/brut/transfermarkt")
-BACKUP_DIR = Path("data/brut/transfermarkt_backup")
-METADATA_FILE = TM_DIR / "_refresh_metadata.json"
+BUCKET = "raw-transfermarkt"
+METADATA_OBJECT = "_refresh_metadata.json"
 
-# Colonnes minimales attendues par transform_players.py pour chaque fichier
-# (vérification structurelle : ces colonnes doivent être présentes, des
-# colonnes supplémentaires ajoutées par Kaggle ne posent pas de problème)
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "localhost:9002")
+minio_client = Minio(
+    MINIO_ENDPOINT,
+    access_key=os.getenv("MINIO_ACCESS_KEY"),
+    secret_key=os.getenv("MINIO_SECRET_KEY"),
+    secure=False,
+)
+
 COLONNES_ATTENDUES = {
     "players.csv": {
         "player_id", "first_name", "last_name", "name", "date_of_birth",
@@ -67,19 +71,18 @@ COLONNES_ATTENDUES = {
     },
 }
 
-# Tolérance sur le volume — deux seuils :
-# - en dessous de SEUIL_ALERTE : accepté mais signalé (variation notable,
-#   éventuellement légitime côté source)
-# - en dessous de SEUIL_BLOQUANT : refusé (téléchargement probablement
-#   tronqué ou corrompu, protection contre une perte de données silencieuse)
 SEUIL_ALERTE = 0.90
 SEUIL_BLOQUANT = 0.30
 
 
+def assurer_bucket() -> None:
+    if not minio_client.bucket_exists(BUCKET):
+        minio_client.make_bucket(BUCKET)
+        print(f"  -> Bucket '{BUCKET}' cree")
+
+
 def telecharger_dataset(dest_dir: Path) -> None:
-    """Télécharge et décompresse le dataset Kaggle dans dest_dir."""
-    # Patch pour un bug connu de la lib Kaggle : os.makedirs échoue si
-    # le dossier ~/.config/kaggle existe déjà (FileExistsError)
+    """Telecharge et decompresse le dataset Kaggle localement (temporaire)."""
     _original_makedirs = os.makedirs
     def _makedirs_safe(name, mode=0o777, exist_ok=False):
         return _original_makedirs(name, mode=mode, exist_ok=True)
@@ -93,17 +96,27 @@ def telecharger_dataset(dest_dir: Path) -> None:
     api = KaggleApi()
     api.authenticate()
 
-    print(f"Téléchargement du dataset {DATASET_SLUG}...")
+    print(f"Telechargement du dataset {DATASET_SLUG}...")
     api.dataset_download_files(DATASET_SLUG, path=str(dest_dir), unzip=True, quiet=False)
+    print(f"  -> telecharge dans {dest_dir}")
 
-    print(f"  → téléchargé dans {dest_dir}")
+
+def compter_lignes_minio(object_name: str) -> int:
+    """Compte les lignes d'un objet CSV deja present dans MinIO (0 si absent)."""
+    try:
+        response = minio_client.get_object(BUCKET, object_name)
+        contenu = response.read()
+        response.close()
+        response.release_conn()
+        return contenu.count(b"\n") - 1
+    except Exception:
+        return 0
 
 
 def valider_snapshot(nouveau_dir: Path) -> None:
     """
-    Valide la structure et le volume du nouveau snapshot avant de
-    l'accepter. Lève une exception si une anomalie est détectée —
-    l'ancien snapshot reste alors intact.
+    Valide structure et volume avant d'accepter. Leve une exception si
+    anomalie detectee -- l'ancien snapshot MinIO reste alors intact.
     """
     for fichier, colonnes_requises in COLONNES_ATTENDUES.items():
         chemin = nouveau_dir / fichier
@@ -117,66 +130,70 @@ def valider_snapshot(nouveau_dir: Path) -> None:
         colonnes_manquantes = colonnes_requises - set(df_nouveau.columns)
         if colonnes_manquantes:
             raise ValueError(
-                f"{fichier} : colonnes manquantes {colonnes_manquantes} — "
-                f"le schéma Kaggle a peut-être changé."
+                f"{fichier} : colonnes manquantes {colonnes_manquantes} -- "
+                f"le schema Kaggle a peut-etre change."
             )
 
-        # Comparaison de volume avec l'ancien snapshot, si disponible
-        ancien_chemin = TM_DIR / fichier
-        if ancien_chemin.exists():
+        nb_ancien = compter_lignes_minio(fichier)
+        if nb_ancien > 0:
             nb_nouveau = sum(1 for _ in open(chemin, encoding="utf-8", errors="replace")) - 1
-            nb_ancien = sum(1 for _ in open(ancien_chemin, encoding="utf-8", errors="replace")) - 1
+            ratio = nb_nouveau / nb_ancien
 
-            if nb_ancien > 0:
-                ratio = nb_nouveau / nb_ancien
-                if ratio < SEUIL_BLOQUANT:
-                    raise ValueError(
-                        f"{fichier} : volume catastrophiquement bas — {nb_nouveau} "
-                        f"lignes contre {nb_ancien} précédemment (ratio {ratio:.0%}). "
-                        f"Refresh refusé, snapshot conservé."
-                    )
-                elif ratio < SEUIL_ALERTE:
-                    print(
-                        f"  ⚠️ {fichier} : volume en baisse notable — {nb_nouveau} "
-                        f"lignes contre {nb_ancien} précédemment (ratio {ratio:.0%}). "
-                        f"Accepté mais à vérifier manuellement."
-                    )
+            if ratio < SEUIL_BLOQUANT:
+                raise ValueError(
+                    f"{fichier} : volume catastrophiquement bas -- {nb_nouveau} "
+                    f"lignes contre {nb_ancien} precedemment (ratio {ratio:.0%}). "
+                    f"Refresh refuse, snapshot MinIO conserve."
+                )
+            elif ratio < SEUIL_ALERTE:
+                print(
+                    f"  ATTENTION {fichier} : volume en baisse notable -- {nb_nouveau} "
+                    f"lignes contre {nb_ancien} precedemment (ratio {ratio:.0%}). "
+                    f"Accepte mais a verifier manuellement."
+                )
 
-        print(f"  ✓ {fichier} validé")
+        print(f"  OK {fichier} valide")
 
 
 def sauvegarder_ancien_snapshot() -> None:
-    """Copie l'ancien snapshot dans un dossier de backup avant remplacement."""
-    if BACKUP_DIR.exists():
-        shutil.rmtree(BACKUP_DIR)
-    if TM_DIR.exists() and any(TM_DIR.iterdir()):
-        shutil.copytree(TM_DIR, BACKUP_DIR)
-        print(f"  → ancien snapshot sauvegardé dans {BACKUP_DIR}")
+    """Copie chaque objet MinIO existant vers une cle de backup avant remplacement."""
+    for fichier in COLONNES_ATTENDUES.keys():
+        try:
+            minio_client.stat_object(BUCKET, fichier)
+            minio_client.copy_object(
+                BUCKET, f"{fichier}.backup",
+                CopySource(BUCKET, fichier),
+            )
+        except Exception:
+            pass  # pas d'objet existant, premier upload
 
 
 def remplacer_snapshot(nouveau_dir: Path) -> None:
-    """Remplace le snapshot local par le nouveau, une fois validé."""
-    TM_DIR.mkdir(parents=True, exist_ok=True)
-    for fichier in nouveau_dir.glob("*.csv"):
-        shutil.copyfile(fichier, TM_DIR / fichier.name)
-    print(f"  → snapshot mis à jour dans {TM_DIR}")
+    """Upload chaque CSV valide vers MinIO."""
+    for fichier in COLONNES_ATTENDUES.keys():
+        chemin = nouveau_dir / fichier
+        minio_client.fput_object(BUCKET, fichier, str(chemin), content_type="text/csv")
+    print(f"  -> snapshot mis a jour dans MinIO ({BUCKET})")
 
 
 def ecrire_metadata() -> None:
-    METADATA_FILE.write_text(
-        json.dumps(
-            {
-                "derniere_actualisation": datetime.now(timezone.utc).isoformat(),
-                "source": DATASET_SLUG,
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
+    contenu = json.dumps(
+        {
+            "derniere_actualisation": datetime.now(timezone.utc).isoformat(),
+            "source": DATASET_SLUG,
+        },
+        indent=2,
+    ).encode("utf-8")
+    minio_client.put_object(
+        BUCKET, METADATA_OBJECT,
+        data=BytesIO(contenu), length=len(contenu),
+        content_type="application/json",
     )
 
 
 def main():
-    print("\n===== REFRESH TRANSFERMARKT (KAGGLE) =====\n")
+    print("\n===== REFRESH TRANSFERMARKT (KAGGLE -> MinIO) =====\n")
+    assurer_bucket()
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -187,7 +204,7 @@ def main():
             valider_snapshot(tmp_path)
         except Exception as e:
             raise RuntimeError(
-                f"Refresh Transfermarkt échoué, snapshot local conservé inchangé : {e}"
+                f"Refresh Transfermarkt echoue, snapshot MinIO conserve inchange : {e}"
             )
 
         print("\nSauvegarde de l'ancien snapshot...")
@@ -197,7 +214,7 @@ def main():
         remplacer_snapshot(tmp_path)
         ecrire_metadata()
 
-    print("\n✅ Refresh Transfermarkt terminé avec succès.")
+    print("\nRefresh Transfermarkt termine avec succes.")
 
 
 if __name__ == "__main__":

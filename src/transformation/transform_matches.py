@@ -2,8 +2,10 @@ import duckdb
 import pandas as pd
 import json
 from pathlib import Path
+from io import BytesIO
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
+from minio import Minio
 import os
 
 load_dotenv()
@@ -13,33 +15,45 @@ POSTGRES_PORT = os.getenv('POSTGRES_PORT', '5432')
 DB_URL = f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{POSTGRES_HOST}:{POSTGRES_PORT}/{os.getenv('POSTGRES_DB')}"
 engine = create_engine(DB_URL)
 
-API_DIR = Path("data/brut/api")
+BUCKET_API = "raw-football-api"
+
+minio_client = Minio(
+    os.getenv("MINIO_ENDPOINT", "localhost:9002"),
+    access_key=os.getenv("MINIO_ACCESS_KEY"),
+    secret_key=os.getenv("MINIO_SECRET_KEY"),
+    secure=False,
+)
 
 
 def charger_matches_api() -> pd.DataFrame:
-    print("Chargement fichiers API...")
+    print("Chargement fichiers API depuis MinIO...")
 
-    # vérification dossier vide
-    fichiers = sorted(API_DIR.glob("*.json"))
-    if not fichiers:
-        raise FileNotFoundError(f"Aucun fichier JSON trouvé dans {API_DIR}")
+    objets = list(minio_client.list_objects(BUCKET_API, recursive=True))
+    fichiers_json = sorted([
+        obj.object_name for obj in objets if obj.object_name.endswith(".json")
+    ])
+    if not fichiers_json:
+        raise FileNotFoundError(f"Aucun fichier JSON trouve dans le bucket {BUCKET_API}")
 
     toutes_lignes = []
 
-    for fichier in fichiers:
+    for object_name in fichiers_json:
         # gestion JSON mal formé
         try:
-            with open(fichier, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            response = minio_client.get_object(BUCKET_API, object_name)
+            contenu = response.read()
+            response.close()
+            response.release_conn()
+            data = json.loads(contenu)
         except json.JSONDecodeError as e:
-            print(f"  ⚠️  Fichier JSON invalide : {fichier.name} — {e}")
+            print(f"  ⚠️  Fichier JSON invalide : {object_name} — {e}")
             continue
 
         competition = data.get("competition", {})
         matches = data.get("matches", [])
 
         if not matches:
-            print(f"  ⚠️  Aucun match dans {fichier.name}")
+            print(f"  ⚠️  Aucun match dans {object_name}")
             continue
 
         for match in matches:

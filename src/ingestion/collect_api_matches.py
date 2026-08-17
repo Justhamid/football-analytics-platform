@@ -1,8 +1,10 @@
 from pathlib import Path
+from io import BytesIO
 import json
 import os
 import time
 import requests
+from minio import Minio
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -28,8 +30,20 @@ MIN_MATCHES_ATTENDUS = {
 
 CHAMPS_OBLIGATOIRES = {"homeTeam", "awayTeam", "score", "utcDate", "status"}
 
-OUTPUT_DIR = Path("data/brut/api")
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+BUCKET = "raw-football-api"
+
+minio_client = Minio(
+    os.getenv("MINIO_ENDPOINT", "localhost:9002"),
+    access_key=os.getenv("MINIO_ACCESS_KEY"),
+    secret_key=os.getenv("MINIO_SECRET_KEY"),
+    secure=False,
+)
+
+
+def assurer_bucket() -> None:
+    if not minio_client.bucket_exists(BUCKET):
+        minio_client.make_bucket(BUCKET)
+        print(f"  -> Bucket '{BUCKET}' cree")
 
 
 def valider_reponse(matches: list, competition_code: str, season: int) -> None:
@@ -113,14 +127,21 @@ def collect_matches(competition_code: str, season: int) -> None:
     matches = data["matches"]
     valider_reponse(matches, competition_code, season)
 
-    output_file = OUTPUT_DIR / f"{competition_code}_{season}_matches.json"
-    with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    object_name = f"{competition_code}_{season}_matches.json"
+    contenu = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+    minio_client.put_object(
+        BUCKET,
+        object_name,
+        data=BytesIO(contenu),
+        length=len(contenu),
+        content_type="application/json",
+    )
 
-    print(f"Enregistré : {output_file} | {len(matches)} matchs")
+    print(f"Enregistré dans MinIO : {BUCKET}/{object_name} | {len(matches)} matchs")
 
 
 def main():
+    assurer_bucket()
     erreurs = []
 
     for competition in COMPETITIONS:

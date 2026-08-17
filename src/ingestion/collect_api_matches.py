@@ -77,7 +77,7 @@ def valider_reponse(matches: list, competition_code: str, season: int) -> None:
             )
 
 
-def Effectuer_requete_securisee(url: str, max_retries: int = 3) -> requests.Response:
+def effectuer_requete_securisee(url: str, max_retries: int = 3) -> requests.Response:
     """
     Exécute une requête HTTP avec gestion automatique du Rate Limit (429).
     Si le plan gratuit (10 req/min) est dépassé, attend le temps nécessaire avant de re-tester.
@@ -106,7 +106,7 @@ def Effectuer_requete_securisee(url: str, max_retries: int = 3) -> requests.Resp
 def collect_matches(competition_code: str, season: int) -> None:
     url = f"https://api.football-data.org/v4/competitions/{competition_code}/matches?season={season}"
     
-    response = Effectuer_requete_securisee(url)
+    response = effectuer_requete_securisee(url)
 
     print(f"{competition_code} {season} -> status {response.status_code}")
 

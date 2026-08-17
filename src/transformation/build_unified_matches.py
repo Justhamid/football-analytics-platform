@@ -2,9 +2,11 @@ import pandas as pd
 import json
 import hashlib
 from pathlib import Path
+from io import BytesIO
 from sqlalchemy import create_engine
 from src.utils.team_mapping import normaliser_nom
 from dotenv import load_dotenv
+from minio import Minio
 import os
 
 load_dotenv()
@@ -74,8 +76,7 @@ def charger_api() -> pd.DataFrame:
 
 
 def charger_football_datasets() -> pd.DataFrame:
-    print("Chargement football-datasets...")
-
+    print("Chargement football-datasets depuis MinIO...")
     mapping_dossiers = {
         "premier_league": "PL",
         "la_liga":        "PD",
@@ -83,34 +84,45 @@ def charger_football_datasets() -> pd.DataFrame:
         "bundesliga":     "BL1",
         "ligue_1":        "FL1",
     }
-
     # Mapping saison fichier → année début
     def annee_debut(nom_fichier: str) -> int:
         code = nom_fichier.replace("season-", "")
         debut = int(code[:2])
         return 2000 + debut if debut <= 30 else 1900 + debut
 
+    minio_client = Minio(
+        os.getenv("MINIO_ENDPOINT", "localhost:9002"),
+        access_key=os.getenv("MINIO_ACCESS_KEY"),
+        secret_key=os.getenv("MINIO_SECRET_KEY"),
+        secure=False,
+    )
+    BUCKET = "raw-football-datasets"
+
     lignes = []
-    base = Path("data/brut/football_datasets")
-
     for dossier, competition in mapping_dossiers.items():
-        chemin = base / dossier
-        if not chemin.exists():
-            continue
-
-        for fichier in sorted(chemin.glob("season-*.csv")):
-            annee = annee_debut(fichier.stem)
+        objets = minio_client.list_objects(BUCKET, prefix=f"{dossier}/", recursive=True)
+        noms_fichiers = sorted([
+            obj.object_name for obj in objets
+            if Path(obj.object_name).name.startswith("season-")
+            and obj.object_name.endswith(".csv")
+        ])
+        for object_name in noms_fichiers:
+            nom_fichier = Path(object_name).stem
+            annee = annee_debut(nom_fichier)
             if annee < 2015:
                 continue
-
             try:
+                response = minio_client.get_object(BUCKET, object_name)
+                contenu = response.read()
+                response.close()
+                response.release_conn()
                 df_s = pd.read_csv(
-                    fichier,
+                    BytesIO(contenu),
                     encoding="utf-8",
                     encoding_errors="replace"
                 )
             except Exception as e:
-                print(f"  ⚠️  Erreur {fichier.name} : {e}")
+                print(f"  ⚠️  Erreur {object_name} : {e}")
                 continue
 
             if "HomeTeam" not in df_s.columns:

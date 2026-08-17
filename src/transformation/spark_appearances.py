@@ -19,6 +19,9 @@ from pyspark.sql.types import (
     StringType, IntegerType, FloatType, DateType
 )
 import os
+import tempfile
+from pathlib import Path
+from minio import Minio
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -31,6 +34,22 @@ POSTGRES_PROPS = {
     "password": os.getenv('POSTGRES_PASSWORD'),
     "driver":   "org.postgresql.Driver"
 }
+
+BUCKET_TM = "raw-transfermarkt"
+
+minio_client = Minio(
+    os.getenv("MINIO_ENDPOINT", "localhost:9002"),
+    access_key=os.getenv("MINIO_ACCESS_KEY"),
+    secret_key=os.getenv("MINIO_SECRET_KEY"),
+    secure=False,
+)
+
+
+def telecharger_depuis_minio(object_name: str, dest_dir: Path) -> str:
+    """Telecharge un objet MinIO vers un fichier temporaire local, pour lecture par Spark."""
+    dest_path = dest_dir / object_name
+    minio_client.fget_object(BUCKET_TM, object_name, str(dest_path))
+    return str(dest_path)
 
 
 def creer_session_spark() -> SparkSession:
@@ -58,11 +77,13 @@ def creer_session_spark() -> SparkSession:
     print(f"  → Cores disponibles : {spark.sparkContext.defaultParallelism}")
     return spark
 
-def charger_appearances(spark: SparkSession) -> "DataFrame":
-    print("\nChargement appearances.csv avec Spark...")
+def charger_appearances(spark: SparkSession, dest_dir: Path) -> "DataFrame":
+    print("\nTelechargement appearances.csv depuis MinIO...")
+    chemin_local = telecharger_depuis_minio("appearances.csv", dest_dir)
 
+    print("Chargement appearances.csv avec Spark...")
     df = spark.read.csv(
-        "data/brut/transfermarkt/appearances.csv",
+        chemin_local,
         header=True,
         inferSchema=True,
         encoding="UTF-8"
@@ -73,10 +94,13 @@ def charger_appearances(spark: SparkSession) -> "DataFrame":
     print(f"  → Colonnes : {df.columns}")
     return df
 
-def charger_players(spark: SparkSession) -> "DataFrame":
-    print("\nChargement players.csv avec Spark...")
+def charger_players(spark: SparkSession, dest_dir: Path) -> "DataFrame":
+    print("\nTelechargement players.csv depuis MinIO...")
+    chemin_local = telecharger_depuis_minio("players.csv", dest_dir)
+
+    print("Chargement players.csv avec Spark...")
     df = spark.read.csv(
-        "data/brut/transfermarkt/players.csv",
+        chemin_local,
         header=True,
         inferSchema=True,
         encoding="UTF-8"
@@ -190,14 +214,17 @@ def main():
 
     spark = creer_session_spark()
 
-    df_appearances = charger_appearances(spark)
-    df_players_ref = charger_players(spark)
-    df_clean       = transformer_appearances(df_appearances, df_players_ref)
-    df_perf        = calculer_performance_spark(df_clean)
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
 
-    afficher_stats(df_perf)
+        df_appearances = charger_appearances(spark, tmp_path)
+        df_players_ref = charger_players(spark, tmp_path)
+        df_clean       = transformer_appearances(df_appearances, df_players_ref)
+        df_perf        = calculer_performance_spark(df_clean)
 
-    sauvegarder_postgres(df_perf)
+        afficher_stats(df_perf)
+
+        sauvegarder_postgres(df_perf)
 
     print("\n✅ Traitement Spark terminé.")
     spark.stop()

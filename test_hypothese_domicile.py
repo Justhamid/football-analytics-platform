@@ -1,8 +1,18 @@
+import os
 import psycopg
 import pandas as pd
 from scipy import stats
+from dotenv import load_dotenv
 
-conn = psycopg.connect(host='127.0.0.1', port=5433, dbname='football_db', user='football_reader', password='reader_pass_2024')
+load_dotenv()
+
+conn = psycopg.connect(
+    host='127.0.0.1',
+    port=5433,
+    dbname='football_db',
+    user='football_reader',
+    password=os.getenv("FOOTBALL_READER_PASSWORD")
+)
 
 df = pd.read_sql('''
     SELECT home_goals, away_goals

@@ -8,7 +8,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     # Connection SQLAlchemy avec Keepalive TCP pour eviter les pertes DNS/socket sous charge
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_postgres/airflow?keepalives=1&keepalives_idle=30&keepalives_interval=10&keepalives_count=5
-    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__FERNET_KEY: '${AIRFLOW_FERNET_KEY}'
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__CORE__MIN_SERIALIZED_DAG_UPDATE_INTERVAL: '30'
@@ -140,7 +140,7 @@ services:
   airflow_init:
     <<: *airflow-common
     container_name: airflow_init
-    command: bash -c "airflow db migrate && airflow users create --username admin --firstname Admin --lastname Football --role Admin --email admin@football.com --password admin123"
+    command: bash -c "airflow db migrate && airflow users create --username admin --firstname Admin --lastname Football --role Admin --email admin@football.com --password ${AIRFLOW_ADMIN_PASSWORD}"
     restart: on-failure
 
   # ─── FASTAPI — API de prédiction ML ──────────────────────

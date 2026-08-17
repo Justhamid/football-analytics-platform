@@ -259,4 +259,16 @@ Les trois principes retenus après cet incident :
 
 ---
 
+## Limite méthodologique connue — Horizon temporel de la cible ML
+
+La cible d'entraînement du modèle de projection (`marts_ml.predictions_projection_carriere`)
+utilise la dernière valorisation connue de chaque joueur, plutôt qu'une fenêtre stricte
+"2 ans après la période jeune" comme le suggère la documentation initiale. Le modèle prédit
+donc un potentiel de carrière à maturité plutôt qu'une échéance précise à +2 ans.
+
+Correction identifiée : contraindre la cible à une fenêtre de valorisation entre 23 et 25 ans
+(date_of_birth + 23 à 25 ans), au prix d'une réduction significative de l'échantillon
+d'entraînement disponible. Non traité dans le cadre de ce projet, le module ML étant un
+différenciateur du projet et non son cœur (Bloc 4 = infrastructure data).
+
 *Document maintenu dans le dépôt GitHub : `Justhamid/football-analytics-platform`*

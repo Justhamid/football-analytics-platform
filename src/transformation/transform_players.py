@@ -1,7 +1,9 @@
 import os
 from pathlib import Path
+from io import BytesIO
 import duckdb
 import pandas as pd
+from minio import Minio
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
@@ -18,17 +20,30 @@ POSTGRES_DB = os.getenv("POSTGRES_DB", "football_db")
 DB_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 engine = create_engine(DB_URL)
 
-TM_DIR = Path("data/brut/transfermarkt")
+BUCKET_TM = "raw-transfermarkt"
+
+minio_client = Minio(
+    os.getenv("MINIO_ENDPOINT", "localhost:9002"),
+    access_key=os.getenv("MINIO_ACCESS_KEY"),
+    secret_key=os.getenv("MINIO_SECRET_KEY"),
+    secure=False,
+)
 
 # Une seule connexion DuckDB partagée
 con = duckdb.connect()
 
 
 def charger_csv(fichier: str) -> pd.DataFrame:
-    path = TM_DIR / fichier
-    if not path.exists():
-        raise FileNotFoundError(f"Fichier introuvable : {path}")
-    df = pd.read_csv(path, encoding="utf-8", encoding_errors="replace")
+    try:
+        response = minio_client.get_object(BUCKET_TM, fichier)
+        contenu = response.read()
+        response.close()
+        response.release_conn()
+    except Exception as e:
+        raise FileNotFoundError(
+            f"Fichier introuvable dans MinIO ({BUCKET_TM}/{fichier}) : {e}"
+        )
+    df = pd.read_csv(BytesIO(contenu), encoding="utf-8", encoding_errors="replace")
     print(f"  → {fichier} : {len(df)} lignes")
     return df
 

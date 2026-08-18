@@ -1,11 +1,9 @@
 from minio import Minio
 from dotenv import load_dotenv
 import os
-
 load_dotenv()
-
 client = Minio(
-    "localhost:9002",
+    os.getenv("MINIO_ENDPOINT", "localhost:9002"),
     access_key=os.getenv("MINIO_ACCESS_KEY"),
     secret_key=os.getenv("MINIO_SECRET_KEY"),
     secure=False

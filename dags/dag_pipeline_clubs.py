@@ -1,4 +1,5 @@
 import os
+import sys
 import subprocess
 from airflow import DAG
 from airflow.operators.python import PythonOperator
@@ -64,7 +65,6 @@ def run_script(script_path: str) -> None:
     if process.stdout:
         for line in process.stdout:
             print(line, end="")
-            import sys
             sys.stdout.flush()
 
     process.wait()

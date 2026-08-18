@@ -27,13 +27,17 @@ modélisation, explorée puis abandonnée au profit de l'approche finale implém
 Ces scripts prototypes n'écrivent dans aucune table utilisée en production. Conservés
 pour la traçabilité de la démarche exploratoire.
 
-## 3. Metabase partage la base PostgreSQL du projet
+## 3. Metabase partage la base PostgreSQL du projet — RÉSOLU
 
-Metabase utilise la même instance PostgreSQL que les données du projet pour stocker
-ses propres métadonnées (tableaux de bord, utilisateurs). En cas d'incident sur cette
-base, Metabase serait indisponible en même temps que les données qu'il analyse. Une
-base dédiée (ou SQLite/H2 embarqué) séparerait proprement les deux responsabilités —
-non implémenté, le risque restant limité dans un contexte de développement individuel.
+Metabase utilisait initialement la même instance PostgreSQL que les
+données du projet pour stocker ses propres métadonnées. Corrigé en
+déplaçant la base applicative de Metabase (comptes, dashboards,
+permissions) vers airflow_postgres, une instance PostgreSQL distincte
+déjà présente dans l'infrastructure — via pg_dump/pg_restore du schéma
+public (144 tables), avec activation préalable de l'extension citext.
+Un incident sur football_postgres n'affecte désormais plus l'accès à
+l'interface Metabase elle-même, seules les données affichées (marts_*)
+seraient temporairement indisponibles.
 
 ## 4. Scripts de validation non intégrés aux DAGs
 

@@ -38,3 +38,5 @@ docker-compose.override.yml
 docker-compose.override.yml
 
 >>>>>>> a87e6746ae77a199e7039846d5d7490122f4aa8a
+
+metabase_backup.dump

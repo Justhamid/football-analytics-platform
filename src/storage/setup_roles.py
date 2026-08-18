@@ -29,7 +29,7 @@ print("\n===== RÔLES ET SÉCURITÉ =====\n")
 
 print("Création rôle reader (Metabase)...")
 
-executer("""
+executer(f"""
     CREATE ROLE football_reader WITH LOGIN PASSWORD '{os.getenv("FOOTBALL_READER_PASSWORD")}';
 """, "Rôle football_reader créé")
 
@@ -81,7 +81,7 @@ executer("""
 
 print("\nCréation rôle writer (ETL pipelines)...")
 
-executer("""
+executer(f"""
     CREATE ROLE football_writer WITH LOGIN PASSWORD '{os.getenv("FOOTBALL_WRITER_PASSWORD")}';
 """, "Rôle football_writer créé")
 

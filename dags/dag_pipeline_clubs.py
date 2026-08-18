@@ -48,20 +48,31 @@ default_args = {
 
 
 def run_script(script_path: str) -> None:
-    """Exécute un script Python du projet."""
+    """Exécute un script Python du projet en diffusant la sortie stdout en temps réel."""
     env = os.environ.copy()
     env["PYTHONPATH"] = "/opt/airflow"
 
-    result = subprocess.run(
-        ["python", script_path],
-        capture_output=True,
+    process = subprocess.Popen(
+        ["python", "-u", script_path],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
         cwd="/opt/airflow",
-        env=env
+        env=env,
     )
-    print(result.stdout)
-    if result.returncode != 0:
-        raise Exception(f"Script échoué : {result.stderr}")
+
+    if process.stdout:
+        for line in process.stdout:
+            print(line, end="")
+            import sys
+            sys.stdout.flush()
+
+    process.wait()
+
+    if process.returncode != 0:
+        raise Exception(
+            f"Script échoué ({script_path}) avec le code d'erreur : {process.returncode}"
+        )
 
 
 with DAG(

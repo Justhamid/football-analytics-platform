@@ -119,8 +119,8 @@ with col2:
     )
 
 # Calcul âge pic et fiabilité
-age_pic_min = max(age_actuel + (21 - age_actuel) + 2, 22)
-age_pic_max = age_pic_min + 2
+age_pic_min = round(24 - (age_actuel - 14) * (2 / 7))
+age_pic_max = age_pic_min + 3
 
 if age_actuel <= 15:
     fiabilite_label = "⚠️ Indicative"

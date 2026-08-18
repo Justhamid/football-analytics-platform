@@ -4,6 +4,11 @@ import os
 
 load_dotenv()
 
+reader_pw = os.getenv("FOOTBALL_READER_PASSWORD")
+writer_pw = os.getenv("FOOTBALL_WRITER_PASSWORD")
+if not reader_pw or not writer_pw:
+    raise ValueError("FOOTBALL_READER_PASSWORD / FOOTBALL_WRITER_PASSWORD manquants dans .env")
+
 conn = psycopg2.connect(
     host="localhost",
     port=5433,

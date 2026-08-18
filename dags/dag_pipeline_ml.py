@@ -28,7 +28,7 @@ def on_failure_callback(context):
     <p>Action requise : vérifier les logs et relancer la tâche si nécessaire.</p>
     """
     send_email(
-        to=os.getenv("AIRFLOW_ALERT_EMAIL", "hamidbelhadjkacem@gmail.com"),
+        to=os.getenv("AIRFLOW_ALERT_EMAIL", ""),
         subject=subject,
         html_content=body
     )
@@ -41,7 +41,7 @@ default_args = {
     "email_on_failure":    True,
     "email_on_retry":      False,
     "email":               [os.getenv("AIRFLOW_ALERT_EMAIL",
-                             "hamidbelhadjkacem@gmail.com")],
+                             "")],
     "retries":             1,
     "retry_delay":         timedelta(minutes=5),
     "on_failure_callback": on_failure_callback,

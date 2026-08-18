@@ -179,8 +179,8 @@ def predict(player: PlayerInput):
         )
 
     # Âge pic
-    age_pic_min = max(player.age_actuel + (21 - player.age_actuel) + 2, 22)
-    age_pic_max = age_pic_min + 2
+    age_pic_min = round(24 - (player.age_actuel - 14) * (2 / 7))
+    age_pic_max = age_pic_min + 3
 
     return PredictionOutput(
         name=player.name,

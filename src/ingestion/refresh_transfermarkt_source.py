@@ -69,6 +69,11 @@ COLONNES_ATTENDUES = {
         "competition_id", "goals", "assists", "yellow_cards", "red_cards",
         "minutes_played",
     },
+    "games.csv": {
+        "game_id", "competition_id", "date",
+        "home_club_name", "away_club_name",
+        "home_club_goals", "away_club_goals",
+    },
 }
 
 SEUIL_ALERTE = 0.90

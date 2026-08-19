@@ -314,6 +314,7 @@ def main():
     df_clubs       = charger_csv("clubs.csv")
     df_valuations  = charger_csv("player_valuations.csv")
     df_transfers   = charger_csv("transfers.csv")
+    df_games       = charger_csv("games.csv")
 
     # Staging — données brutes telles quelles
     print("\nChargement staging...")
@@ -321,6 +322,8 @@ def main():
     charger_postgres(df_appearances, "stg_appearances", "staging")
     charger_postgres(df_valuations,  "stg_valuations",  "staging")
     charger_postgres(df_transfers,   "stg_transfers",   "staging")
+    charger_postgres(df_clubs,       "stg_clubs",       "staging")
+    charger_postgres(df_games,       "stg_games",       "staging")
 
     # Transformation — données nettoyées
     print("\nTransformation...")

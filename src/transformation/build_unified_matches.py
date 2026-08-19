@@ -37,12 +37,31 @@ def generer_match_id(date: str, home: str, away: str, competition: str) -> str:
 
 
 def charger_api() -> pd.DataFrame:
-    print("Chargement API football-data...")
-    lignes = []
+    print("Chargement API football-data depuis MinIO...")
+    minio_client = Minio(
+        os.getenv("MINIO_ENDPOINT", "localhost:9002"),
+        access_key=os.getenv("MINIO_ACCESS_KEY"),
+        secret_key=os.getenv("MINIO_SECRET_KEY"),
+        secure=False,
+    )
+    BUCKET = "raw-football-api"
+    objets = minio_client.list_objects(BUCKET, recursive=True)
+    fichiers_json = sorted([
+        obj.object_name for obj in objets
+        if obj.object_name.endswith(".json")
+    ])
 
-    for fichier in sorted(Path("data/brut/api").glob("*.json")):
-        with open(fichier, "r", encoding="utf-8") as f:
-            data = json.load(f)
+    lignes = []
+    for object_name in fichiers_json:
+        try:
+            response = minio_client.get_object(BUCKET, object_name)
+            contenu  = response.read()
+            response.close()
+            response.release_conn()
+            data = json.loads(contenu)
+        except Exception as e:
+            print(f"  ⚠️  Fichier JSON invalide : {object_name} — {e}")
+            continue
 
         competition_code = data.get("competition", {}).get("code", "")
 
@@ -50,24 +69,24 @@ def charger_api() -> pd.DataFrame:
             if match.get("status") != "FINISHED":
                 continue
 
-            date       = match.get("utcDate", "")[:10]
-            home_raw   = match.get("homeTeam", {}).get("name", "")
-            away_raw   = match.get("awayTeam", {}).get("name", "")
-            home_norm  = normaliser_nom(home_raw)
-            away_norm  = normaliser_nom(away_raw)
+            date        = match.get("utcDate", "")[:10]
+            home_raw    = match.get("homeTeam", {}).get("name", "")
+            away_raw    = match.get("awayTeam", {}).get("name", "")
+            home_norm   = normaliser_nom(home_raw)
+            away_norm   = normaliser_nom(away_raw)
             competition = COMP_MAPPING.get(competition_code, competition_code)
 
             lignes.append({
-                "match_id":       generer_match_id(date, home_norm, away_norm, competition),
-                "source":         "api",
-                "competition":    competition,
-                "date":           date,
-                "season":         match.get("season", {}).get("startDate", "")[:4],
-                "round":          match.get("matchday"),
-                "home_team":      home_norm,
-                "away_team":      away_norm,
-                "home_goals":     match.get("score", {}).get("fullTime", {}).get("home"),
-                "away_goals":     match.get("score", {}).get("fullTime", {}).get("away"),
+                "match_id":    generer_match_id(date, home_norm, away_norm, competition),
+                "source":      "api",
+                "competition": competition,
+                "date":        date,
+                "season":      match.get("season", {}).get("startDate", "")[:4],
+                "round":       match.get("matchday"),
+                "home_team":   home_norm,
+                "away_team":   away_norm,
+                "home_goals":  match.get("score", {}).get("fullTime", {}).get("home"),
+                "away_goals":  match.get("score", {}).get("fullTime", {}).get("away"),
             })
 
     df = pd.DataFrame(lignes)
@@ -184,60 +203,16 @@ def charger_football_datasets() -> pd.DataFrame:
     return df
 
 
-def charger_transfermarkt() -> pd.DataFrame:
-    print("Chargement Transfermarkt games...")
-
-    df = pd.read_csv(
-        "data/brut/transfermarkt/games.csv",
-        encoding="utf-8",
-        encoding_errors="replace"
-    )
-
-    df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    df = df[df["date"] >= "2017-01-01"]
-    df = df[df["competition_id"].isin(["GB1", "ES1", "IT1", "L1", "FR1"])]
-    df = df.dropna(subset=["home_club_name", "away_club_name", "date"])
-
-    lignes = []
-    for _, row in df.iterrows():
-        date        = row["date"].strftime("%Y-%m-%d")
-        competition = COMP_MAPPING.get(row["competition_id"], row["competition_id"])
-        home_norm   = normaliser_nom(str(row["home_club_name"]))
-        away_norm   = normaliser_nom(str(row["away_club_name"]))
-
-        lignes.append({
-            "match_id":       generer_match_id(date, home_norm, away_norm, competition),
-            "source":         "transfermarkt",
-            "competition":    competition,
-            "date":           date,
-            "season":         str(row.get("season", "")),
-            "round":          row.get("round"),
-            "home_team":      home_norm,
-            "away_team":      away_norm,
-            "home_goals":     row.get("home_club_goals"),
-            "away_goals":     row.get("away_club_goals"),
-            "tm_game_id":     row.get("game_id"),
-        })
-
-    df_out = pd.DataFrame(lignes)
-    print(f"  → {len(df_out)} matchs Transfermarkt")
-    return df_out
-
-
 def fusionner_sources(
     df_api: pd.DataFrame,
     df_fd: pd.DataFrame,
-    df_tm: pd.DataFrame
 ) -> pd.DataFrame:
     print("\nFusion des sources...")
 
-    # Concaténation complète
-    df_all = pd.concat([df_api, df_fd, df_tm], ignore_index=True)
+    df_all = pd.concat([df_api, df_fd], ignore_index=True)
 
-    # Déduplication sur match_id
-    # En cas de doublon, on garde la source dans cet ordre de priorité :
-    # api > football_datasets > transfermarkt
-    priorite = {"api": 0, "football_datasets": 1, "transfermarkt": 2}
+    # Déduplication : api > football_datasets
+    priorite = {"api": 0, "football_datasets": 1}
     df_all["priorite"] = df_all["source"].map(priorite)
     df_all = df_all.sort_values("priorite")
     df_all = df_all.drop_duplicates(subset=["match_id"], keep="first")
@@ -318,7 +293,7 @@ def main():
     df_api = charger_api()
     df_fd  = charger_football_datasets()
 
-    df_unified = fusionner_sources(df_api, df_fd, pd.DataFrame())
+    df_unified = fusionner_sources(df_api, df_fd)
     verifier_coherence(df_unified)
 
     # Sauvegarde PostgreSQL

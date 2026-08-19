@@ -43,11 +43,7 @@ def construire_appearances_unified() -> pd.DataFrame:
     print(f"  → {len(appearances)} apparitions chargées")
 
     # Matchs Transfermarkt avec noms clubs
-    games_tm = pd.read_csv(
-        "data/brut/transfermarkt/games.csv",
-        encoding="utf-8",
-        encoding_errors="replace"
-    )
+    games_tm = pd.read_sql("SELECT * FROM staging.stg_games", engine)
     games_tm["date"] = pd.to_datetime(games_tm["date"], errors="coerce")
     games_tm = games_tm[games_tm["date"] >= "2012-01-01"]
 

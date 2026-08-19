@@ -3,13 +3,13 @@ Football Analytics Platform — API REST de prédiction ML
 Expose les prédictions du modèle de projection de carrière via FastAPI.
 
 Endpoints :
-  GET  /                    → santé de l'API
-  GET  /predictions         → liste des 1 147 prédictions U22 depuis PostgreSQL
-  POST /predict             → prédiction à la volée pour un nouveau joueur
+  GET  /                    → santé de l'API (public)
+  GET  /predictions         → liste des 1 147 prédictions U22 depuis PostgreSQL (protégé par clé API)
+  POST /predict              → prédiction à la volée pour un nouveau joueur (protégé par clé API)
   GET  /predictions/{id}    → prédiction d'un joueur spécifique par player_id
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends
 from pydantic import BaseModel, Field
 import pickle
 import numpy as np
@@ -20,6 +20,19 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# ── Sécurité — clé API ────────────────────────────────────────────────────────
+API_SECRET_KEY = os.getenv("API_SECRET_KEY")
+
+if not API_SECRET_KEY:
+    raise ValueError("API_SECRET_KEY manquante dans .env")
+
+
+def verifier_cle_api(x_api_key: str = Header(...)):
+    """Vérifie la clé API transmise dans l'en-tête X-API-Key."""
+    if x_api_key != API_SECRET_KEY:
+        raise HTTPException(status_code=401, detail="Clé API invalide ou manquante")
+
 
 # ── Chargement du modèle ──────────────────────────────────────────────────────
 MODEL_PATH = Path("models/model_projection_carriere.pkl")
@@ -126,7 +139,8 @@ def root():
     }
 
 
-@app.post("/predict", response_model=PredictionOutput, tags=["Prédiction"])
+@app.post("/predict", response_model=PredictionOutput, tags=["Prédiction"],
+          dependencies=[Depends(verifier_cle_api)])
 def predict(player: PlayerInput):
     """
     Prédit la valeur marchande future d'un jeune joueur (U16–U21)
@@ -196,7 +210,7 @@ def predict(player: PlayerInput):
     )
 
 
-@app.get("/predictions", tags=["Données"])
+@app.get("/predictions", tags=["Données"], dependencies=[Depends(verifier_cle_api)])
 def get_predictions(limit: int = 20, offset: int = 0):
     """
     Retourne les prédictions U22 stockées dans PostgreSQL
@@ -225,7 +239,7 @@ def get_predictions(limit: int = 20, offset: int = 0):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/predictions/{player_id}", tags=["Données"])
+@app.get("/predictions/{player_id}", tags=["Données"], dependencies=[Depends(verifier_cle_api)])
 def get_prediction_by_id(player_id: int):
     """
     Retourne la prédiction d'un joueur spécifique par son player_id.

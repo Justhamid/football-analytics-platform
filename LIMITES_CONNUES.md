@@ -61,3 +61,14 @@ avec des versions plus récentes. scikit-learn a été aligné (1.8.0 des deux c
 pour la désérialisation du modèle `.pkl`) ; pandas reste différent sans impact observé sur
 le fonctionnement. Migrer vers une image Airflow basée sur Python 3.9+ permettrait un
 alignement complet.
+
+## 6. Authentification API REST — RÉSOLU
+
+Les 3 endpoints sensibles (POST /predict, GET /predictions,
+GET /predictions/{id}) sont désormais protégés par une clé API
+transmise via l'en-tête X-API-Key, vérifiée à chaque requête. Seul
+GET / reste public (simple healthcheck, aucune donnée exposée). Les
+communications restent en HTTP simple sans TLS, adapté au contexte de
+développement local -- à corriger avant tout déploiement public.
+Aucun scan automatisé des vulnérabilités des dépendances (pip-audit,
+safety) n'est encore intégré à la CI/CD.

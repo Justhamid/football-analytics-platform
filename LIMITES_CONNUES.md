@@ -18,14 +18,17 @@ Correction identifiée : contraindre la cible à une fenêtre de valorisation en
 d'entraînement disponible. Non traité dans le cadre de ce projet, le module ML étant un
 différenciateur du projet et non son cœur (Bloc 4 = infrastructure data).
 
-## 2. Scripts ML prototypes non utilisés
+## 2. Un modèle ML de production, un ancien essai non nettoyé
 
-Le dossier `src/ml/` contient 4 scripts (`build_features.py`, `build_features_temporal.py`,
-`train_model.py`, `train_model_temporal.py`) correspondant à une première approche de
-modélisation, explorée puis abandonnée au profit de l'approche finale implémentée dans
-`train_model_projection.py` — le seul script réellement intégré au DAG `pipeline_ml`.
-Ces scripts prototypes n'écrivent dans aucune table utilisée en production. Conservés
-pour la traçabilité de la démarche exploratoire.
+Le projet a un seul modèle réellement actif : `train_model_projection.py`,
+seul appelé par le DAG `pipeline_ml`, dont les résultats alimentent l'API
+et Streamlit (`marts_ml.predictions_projection_carriere`). Un essai
+antérieur, `train_model_temporal.py`, a été déplacé vers `archive/` mais
+sa table de résultats (`marts_ml.predictions_market_value_temporal`,
+267 660 lignes) n'a jamais été supprimée de la base -- elle ne reçoit plus
+de mise à jour depuis son dernier lancement manuel. Un dashboard Metabase
+(Scouting) interrogeait par erreur cette table figée ; corrigé pour
+pointer vers la vraie table de production.
 
 ## 3. Metabase partage la base PostgreSQL du projet — RÉSOLU
 

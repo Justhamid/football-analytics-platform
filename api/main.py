@@ -9,7 +9,11 @@ Endpoints :
   GET  /predictions/{id}    → prédiction d'un joueur spécifique par player_id
 """
 
-from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi import FastAPI, HTTPException, Header, Depends, Request
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from pydantic import BaseModel, Field
 import pickle
 import numpy as np
@@ -18,6 +22,8 @@ from pathlib import Path
 from sqlalchemy import create_engine, text
 import os
 from dotenv import load_dotenv
+
+limiter = Limiter(key_func=get_remote_address)
 
 load_dotenv()
 
@@ -68,6 +74,22 @@ app = FastAPI(
     ),
     version="1.0.0",
 )
+
+# ── CORS — origines autorisées ────────────────────────────────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",   # Metabase
+        "http://localhost:8501",   # Streamlit
+        "http://localhost:8080",   # Airflow
+    ],
+    allow_methods=["GET", "POST"],
+    allow_headers=["X-API-Key", "Content-Type"],
+)
+
+# ── Rate limiting ─────────────────────────────────────────────────────────────
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 # ── Schémas Pydantic ──────────────────────────────────────────────────────────
@@ -141,7 +163,8 @@ def root():
 
 @app.post("/predict", response_model=PredictionOutput, tags=["Prédiction"],
           dependencies=[Depends(verifier_cle_api)])
-def predict(player: PlayerInput):
+@limiter.limit("30/minute")
+async def predict(request: Request, player: PlayerInput):
     """
     Prédit la valeur marchande future d'un jeune joueur (U16–U21)
     à partir de ses statistiques de formation.
@@ -211,7 +234,8 @@ def predict(player: PlayerInput):
 
 
 @app.get("/predictions", tags=["Données"], dependencies=[Depends(verifier_cle_api)])
-def get_predictions(limit: int = 20, offset: int = 0):
+@limiter.limit("60/minute")
+async def get_predictions(request: Request, limit: int = 20, offset: int = 0):
     """
     Retourne les prédictions U22 stockées dans PostgreSQL
     (table marts_ml.predictions_projection_carriere).
@@ -240,7 +264,8 @@ def get_predictions(limit: int = 20, offset: int = 0):
 
 
 @app.get("/predictions/{player_id}", tags=["Données"], dependencies=[Depends(verifier_cle_api)])
-def get_prediction_by_id(player_id: int):
+@limiter.limit("60/minute")
+async def get_prediction_by_id(request: Request, player_id: int):
     """
     Retourne la prédiction d'un joueur spécifique par son player_id.
     """

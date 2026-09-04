@@ -241,4 +241,6 @@ jobs:
             docker pull ghcr.io/${{ env.OWNER_LC }}/football-api:latest
             docker stop football-api || true
             docker rm football-api || true
-            docker run -d --name football-api -p 8000:8000 ghcr.io/${{ env.OWNER_LC }}/football-api:latest
+            docker run -d --name football-api -p 8000:8000 \
+              -e API_SECRET_KEY="${{ secrets.API_SECRET_KEY }}" \
+              ghcr.io/${{ env.OWNER_LC }}/football-api:latest

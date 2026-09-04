@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   # ────────────────────────────────────────────────────────────
   # JOB 1 — Qualité du code
@@ -187,3 +191,48 @@ jobs:
           echo "  ✅ Sécurité         : .env non versionné"
           echo "  ✅ Tests unitaires  : déduplication, ML, SQL"
           echo "======================================"
+
+  # ────────────────────────────────────────────────────────────
+  # JOB 5 — Build & Push image Docker vers GHCR
+  # ────────────────────────────────────────────────────────────
+  build-and-push:
+    name: Build et publication image Docker
+    runs-on: ubuntu-latest
+    needs: [code-quality, security-check, tests]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Connexion à GitHub Container Registry
+        run: echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build de l'image
+        run: docker build -t ghcr.io/${{ github.repository_owner }}/football-api:latest ./api
+
+      - name: Push de l'image
+        run: docker push ghcr.io/${{ github.repository_owner }}/football-api:latest
+
+  # ────────────────────────────────────────────────────────────
+  # JOB 6 — Déploiement sur le serveur Oracle Cloud
+  # ────────────────────────────────────────────────────────────
+  deploy:
+    name: Déploiement continu
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Déploiement via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          script: |
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker pull ghcr.io/${{ github.repository_owner }}/football-api:latest
+            docker stop football-api || true
+            docker rm football-api || true
+            docker run -d --name football-api -p 8000:8000 ghcr.io/${{ github.repository_owner }}/football-api:latest

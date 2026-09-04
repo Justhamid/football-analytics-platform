@@ -205,14 +205,17 @@ jobs:
       - name: Checkout du code
         uses: actions/checkout@v4
 
+      - name: Définir le nom en minuscules
+        run: echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+
       - name: Connexion à GitHub Container Registry
         run: echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Build de l'image
-        run: docker build -t ghcr.io/${{ github.repository_owner }}/football-api:latest ./api
+        run: docker build -t ghcr.io/${{ env.OWNER_LC }}/football-api:latest ./api
 
       - name: Push de l'image
-        run: docker push ghcr.io/${{ github.repository_owner }}/football-api:latest
+        run: docker push ghcr.io/${{ env.OWNER_LC }}/football-api:latest
 
   # ────────────────────────────────────────────────────────────
   # JOB 6 — Déploiement sur le serveur Oracle Cloud
@@ -224,6 +227,9 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
+      - name: Définir le nom en minuscules
+        run: echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+
       - name: Déploiement via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -232,7 +238,7 @@ jobs:
           key: ${{ secrets.ORACLE_SSH_KEY }}
           script: |
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            docker pull ghcr.io/${{ github.repository_owner }}/football-api:latest
+            docker pull ghcr.io/${{ env.OWNER_LC }}/football-api:latest
             docker stop football-api || true
             docker rm football-api || true
-            docker run -d --name football-api -p 8000:8000 ghcr.io/${{ github.repository_owner }}/football-api:latest
+            docker run -d --name football-api -p 8000:8000 ghcr.io/${{ env.OWNER_LC }}/football-api:latest

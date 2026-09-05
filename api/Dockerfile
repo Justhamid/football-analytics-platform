@@ -5,8 +5,7 @@ WORKDIR /app
 COPY requirements_api.txt .
 RUN pip install --no-cache-dir -r requirements_api.txt
 
-COPY api/ .
-COPY models/ ./models/
+COPY . .
 
 EXPOSE 8000
 

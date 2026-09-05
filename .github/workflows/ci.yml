@@ -244,3 +244,54 @@ jobs:
             docker run -d --name football-api -p 8000:8000 \
               -e API_SECRET_KEY="${{ secrets.API_SECRET_KEY }}" \
               ghcr.io/${{ env.OWNER_LC }}/football-api:latest
+
+  # ────────────────────────────────────────────────────────────
+  # JOB 7 — Build & Push image Streamlit
+  # ────────────────────────────────────────────────────────────
+  build-and-push-streamlit:
+    name: Build et publication image Streamlit
+    runs-on: ubuntu-latest
+    needs: [code-quality, security-check, tests]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Définir le nom en minuscules
+        run: echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+
+      - name: Connexion à GHCR
+        run: echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build de l'image
+        run: docker build -t ghcr.io/${{ env.OWNER_LC }}/football-streamlit:latest -f Dockerfile.streamlit .
+
+      - name: Push de l'image
+        run: docker push ghcr.io/${{ env.OWNER_LC }}/football-streamlit:latest
+
+  # ────────────────────────────────────────────────────────────
+  # JOB 8 — Déploiement Streamlit sur Oracle Cloud
+  # ────────────────────────────────────────────────────────────
+  deploy-streamlit:
+    name: Déploiement continu Streamlit
+    runs-on: ubuntu-latest
+    needs: build-and-push-streamlit
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Définir le nom en minuscules
+        run: echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+
+      - name: Déploiement via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          script: |
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker pull ghcr.io/${{ env.OWNER_LC }}/football-streamlit:latest
+            docker stop football-streamlit || true
+            docker rm football-streamlit || true
+            docker run -d --name football-streamlit -p 8501:8501 ghcr.io/${{ env.OWNER_LC }}/football-streamlit:latest

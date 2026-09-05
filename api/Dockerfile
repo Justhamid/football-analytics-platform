@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 COPY . .
 
 RUN mkdir -p models && curl -L -o models/model_projection_carriere.pkl \
-    https://github.com/Justhamid/football-analytics-platform/releases/tag/V1.0-model/model_projection_carriere.pkl
+    https://github.com/Justhamid/football-analytics-platform/releases/download/V1.0-model/model_projection_carriere.pkl
 
 EXPOSE 8000
 
